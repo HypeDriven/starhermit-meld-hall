@@ -1,0 +1,86 @@
+[
+  {
+    "name": "card-select",
+    "seconds": 1,
+    "prompt": "A single playing card being lifted softly off a wooden card table, brief gentle paper flick, quiet and warm, no music.",
+    "event": "select"
+  },
+  {
+    "name": "card-deselect",
+    "seconds": 1,
+    "prompt": "A playing card being set back down gently onto a felt card table, soft muted paper tap, quiet and close, no music.",
+    "event": "select"
+  },
+  {
+    "name": "invalid-buzz",
+    "seconds": 1,
+    "prompt": "A short low dull wooden thunk with a soft muted buzz, like a gentle 'not allowed' signal in a quiet game hall, no music.",
+    "event": "invalid"
+  },
+  {
+    "name": "card-draw",
+    "seconds": 1,
+    "prompt": "A playing card sliding briskly off the top of a deck of cards, crisp paper swish, close and dry, no music.",
+    "event": "draw"
+  },
+  {
+    "name": "card-draw-take",
+    "seconds": 1,
+    "prompt": "A playing card being plucked from a small pile of cards on a table, quick light paper snap, no music.",
+    "event": "draw"
+  },
+  {
+    "name": "meld-fan",
+    "seconds": 2,
+    "prompt": "Three playing cards fanned down onto a polished wooden table in quick succession with a soft satisfying flourish, subtle warm shimmer, no music.",
+    "event": "meld"
+  },
+  {
+    "name": "layoff-tap",
+    "seconds": 1,
+    "prompt": "A single playing card tapped once and slid a short distance next to other cards on a felt table, light paper touch, no music.",
+    "event": "layoff"
+  },
+  {
+    "name": "card-discard",
+    "seconds": 1,
+    "prompt": "A playing card tossed lightly onto a discard pile, brief paper flutter ending in a soft landing tap on other cards, no music.",
+    "event": "discard"
+  },
+  {
+    "name": "turn-chime",
+    "seconds": 1,
+    "prompt": "A small gentle bell struck once with a wooden mallet, warm mellow ding with a short soft decay, quiet game hall, no music.",
+    "event": "turn"
+  },
+  {
+    "name": "round-win",
+    "seconds": 3,
+    "prompt": "A warm celebratory cascade of small brass bells with a short rising harp glissando, cozy card hall victory flourish, elegant and restrained.",
+    "event": "roundWin"
+  },
+  {
+    "name": "round-lose",
+    "seconds": 2,
+    "prompt": "A gentle descending wooden marimba phrase of three soft low notes, quiet sympathetic defeat, warm and subdued, no music.",
+    "event": "roundLose"
+  },
+  {
+    "name": "achievement-chime",
+    "seconds": 2,
+    "prompt": "A bright sparkling glockenspiel chime with a shimmering ringing tail, small elegant triumph fanfare, no music.",
+    "event": "achievement"
+  },
+  {
+    "name": "ui-click",
+    "seconds": 1,
+    "prompt": "A short soft wooden button click, muted warm and dry, subtle interface press, no music.",
+    "event": "ui"
+  },
+  {
+    "name": "ui-confirm",
+    "seconds": 1,
+    "prompt": "A gentle wooden tick with a subtle warm resonance, soft interface confirmation tap, no music.",
+    "event": "ui"
+  }
+]

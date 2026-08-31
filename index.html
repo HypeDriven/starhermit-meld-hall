@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="Meld Hall — an elegant hall-table card game of sets, runs, and low deadwood." />
+<title>Meld Hall</title>
+<link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+<div id="app">
+  <div id="gl-wrap"><canvas id="gl" aria-hidden="true"></canvas></div>
+
+  <!-- Title / home -->
+  <section id="screen-title" class="screen active" aria-labelledby="title-h">
+    <div class="panel" style="margin:auto;text-align:center">
+      <h1 id="title-h">Meld Hall</h1>
+      <p class="muted">Draw, meld sets and runs, lay off, discard — keep your deadwood low.</p>
+      <div class="menu-grid" style="margin-top:16px">
+        <button id="btn-play" class="primary">Play</button>
+        <button id="btn-daily">Daily Challenge <span id="daily-date" class="badge"></span></button>
+        <button id="btn-journey">Journey <span id="journey-progress" class="badge"></span></button>
+        <button id="btn-learn">Learn</button>
+        <button id="btn-help">How to Play</button>
+        <button id="btn-settings">Settings</button>
+      </div>
+      <p class="muted" id="profile-line" style="margin-top:14px">Guest profile — progress is saved on this device.</p>
+    </div>
+  </section>
+
+  <!-- Mode setup -->
+  <section id="screen-mode" class="screen" aria-labelledby="mode-h">
+    <div class="panel" style="margin:auto">
+      <h2 id="mode-h">Choose a mode</h2>
+      <div id="mode-list" class="menu-grid"></div>
+      <div id="mode-detail" class="muted" style="margin:12px 0" aria-live="polite"></div>
+      <div id="mode-options" class="menu-grid hidden">
+        <div class="field"><label for="opt-players">Players</label>
+          <select id="opt-players"><option>2</option><option>3</option><option>4</option></select></div>
+        <div class="field"><label for="opt-target">Target score</label>
+          <select id="opt-target"><option>30</option><option selected>50</option><option>100</option></select></div>
+        <div class="field"><label for="opt-difficulty">AI difficulty</label>
+          <select id="opt-difficulty"><option value="1">Relaxed</option><option value="2">Regular</option><option value="3">Sharp</option></select></div>
+      </div>
+      <div class="row spread">
+        <button id="btn-mode-back">Back</button>
+        <button id="btn-mode-start" class="primary">Start</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Play -->
+  <section id="screen-play" class="screen" aria-label="Game table">
+    <div id="hud-top">
+      <div class="group">
+        <strong id="hud-objective">Objective</strong>
+        <span id="hud-turn" class="badge">—</span>
+        <span id="hud-deck" class="badge" title="Cards left in deck"></span>
+      </div>
+      <div class="group">
+        <span id="hud-score" class="badge"></span>
+        <button id="btn-rail-left" aria-label="Progress panel">☰</button>
+        <button id="btn-pause" aria-label="Pause">⏸</button>
+        <button id="btn-rail-right" aria-label="Status panel">⋯</button>
+      </div>
+    </div>
+
+    <aside id="rail-left" class="rail" aria-label="Objective and progress">
+      <h3>Objective</h3>
+      <p id="rail-objective"></p>
+      <h3>Progress</h3>
+      <p id="rail-progress"></p>
+    </aside>
+
+    <div id="stage"></div>
+
+    <aside id="rail-right" class="rail" aria-label="Table status">
+      <h3>Table</h3>
+      <div id="meld-dom" aria-label="Melds on the table"></div>
+      <h3>Scores</h3>
+      <div id="rail-scores"></div>
+    </aside>
+
+    <div id="action-tray" role="toolbar" aria-label="Actions">
+      <button id="act-draw-deck">Draw deck <kbd>D</kbd></button>
+      <button id="act-draw-discard">Take discard <kbd>F</kbd></button>
+      <button id="act-meld">Meld <kbd>M</kbd></button>
+      <button id="act-layoff">Lay off <kbd>L</kbd></button>
+      <button id="act-discard">Discard <kbd>X</kbd></button>
+      <button id="act-undo">Undo <kbd>U</kbd></button>
+      <button id="act-hint">Hint <kbd>H</kbd></button>
+    </div>
+    <div id="hand-dom" role="listbox" aria-label="Your hand" aria-multiselectable="true"></div>
+  </section>
+
+  <!-- Results -->
+  <section id="screen-results" class="screen" aria-labelledby="results-h">
+    <div class="panel" style="margin:auto">
+      <h2 id="results-h">Round over</h2>
+      <p id="results-headline"></p>
+      <table class="score-table" id="results-table" aria-label="Score breakdown"></table>
+      <div id="results-achievements"></div>
+      <div class="row spread">
+        <button id="btn-results-leave">Leave</button>
+        <div class="row">
+          <button id="btn-results-replay">Replay</button>
+          <button id="btn-results-next" class="primary">Next</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Help -->
+  <section id="screen-help" class="screen" aria-labelledby="help-h">
+    <div class="panel" style="margin:auto">
+      <h2 id="help-h">How to play</h2>
+      <div id="help-rules"></div>
+      <h3>Controls</h3>
+      <div id="help-controls"></div>
+      <button id="btn-help-back">Back</button>
+    </div>
+  </section>
+
+  <!-- Pause / settings overlay -->
+  <div id="overlay-pause" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pause-h">
+    <div class="panel">
+      <h2 id="pause-h">Paused</h2>
+      <div class="menu-grid">
+        <button id="btn-resume" class="primary">Resume</button>
+        <button id="btn-pause-settings">Settings</button>
+        <button id="btn-pause-help">Help</button>
+        <button id="btn-leave" class="danger">Leave match</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay-settings" class="overlay" role="dialog" aria-modal="true" aria-labelledby="settings-h">
+    <div class="panel">
+      <h2 id="settings-h">Settings</h2>
+      <div class="row" style="gap:24px">
+        <div style="flex:1;min-width:220px">
+          <h3>Audio</h3>
+          <div class="field"><label for="set-music">Music</label><input id="set-music" type="range" min="0" max="1" step="0.05"></div>
+          <div class="field"><label for="set-effects">Effects</label><input id="set-effects" type="range" min="0" max="1" step="0.05"></div>
+          <div class="field"><label for="set-ambience">Ambience</label><input id="set-ambience" type="range" min="0" max="1" step="0.05"></div>
+          <div class="field"><label for="set-voice">Voice</label><input id="set-voice" type="range" min="0" max="1" step="0.05"></div>
+          <label><input id="set-muted" type="checkbox"> Mute all</label>
+          <label style="display:block"><input id="set-captions" type="checkbox"> Captions for sounds</label>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <h3>Graphics &amp; access</h3>
+          <div class="field"><label for="set-quality">Quality tier</label>
+            <select id="set-quality"><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+          <label style="display:block"><input id="set-motion" type="checkbox"> Reduced motion</label>
+          <label style="display:block"><input id="set-contrast" type="checkbox"> High contrast</label>
+          <label style="display:block"><input id="set-large-text" type="checkbox"> Larger text</label>
+          <label style="display:block"><input id="set-lefty" type="checkbox"> Left-handed controls</label>
+          <label style="display:block"><input id="set-haptics" type="checkbox"> Haptics</label>
+          <div class="field"><label for="set-palette">Color palette</label>
+            <select id="set-palette"><option value="default">Default</option><option value="deuteranopia">Deuteranopia-safe</option><option value="protanopia">Protanopia-safe</option><option value="tritanopia">Tritanopia-safe</option></select></div>
+        </div>
+      </div>
+      <button id="btn-settings-close" class="primary">Done</button>
+    </div>
+  </div>
+
+  <div id="caption-toast" role="status"></div>
+  <div id="live-region" class="sr-only" aria-live="polite"></div>
+  <div id="error-region" class="sr-only" aria-live="assertive"></div>
+  <div id="compat-message" class="overlay" role="alert">
+    <div class="panel"><h2>3D unavailable</h2>
+      <p>Your browser could not create a WebGL context. The card table below remains fully playable with the accessible card list.</p>
+      <button id="btn-compat-continue" class="primary">Continue without 3D</button>
+    </div>
+  </div>
+</div>
+
+<script src="./src/three.min.js"></script>
+<script src="./src/rules.js"></script>
+<script src="./src/content.js"></script>
+<script src="./src/session.js"></script>
+<script src="./src/audio.js"></script>
+<script src="./src/render.js"></script>
+<script src="./src/ui.js"></script>
+<script src="./src/main.js"></script>
+</body>
+</html>
