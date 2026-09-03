@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Meld Hall — offline test suite (node test/run.js).
+ * Meld Hall — offline test suite (node tests/run.js).
  * Covers: rules legality, invalid-action reasons, scoring components,
  * terminal states, serialization, replay determinism (property test),
  * malformed-command fuzzing, golden sessions, and content validation.
