@@ -77,6 +77,9 @@
     this.cardGeo = new THREE.BoxGeometry(CARD_W, CARD_T, CARD_H);
     this.faceTextures = {};
     this.backTexture = makeBackTexture(this.theme.cardBack);
+    const backSide = new THREE.MeshStandardMaterial({ color: 0xe8e2d0, roughness: 0.7 });
+    const backTop = new THREE.MeshStandardMaterial({ map: this.backTexture, roughness: 0.6 });
+    this.backMats = [backSide, backSide, backTop, backSide, backSide, backSide];
     this.markerMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.theme.accent), transparent: true, opacity: 0.85 });
     this.ghostMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.35 });
 
@@ -229,9 +232,7 @@
 
     const self = this;
     function addCard(cardId, x, z, zone, index, faceUp) {
-      const mesh = new THREE.Mesh(self.cardGeo, faceUp === false
-        ? [null, null, new THREE.MeshStandardMaterial({ map: self.backTexture }), null, null, null].map(function (m) { return m || new THREE.MeshStandardMaterial({ color: 0xe8e2d0 }); })
-        : self.faceMat(cardId));
+      const mesh = new THREE.Mesh(self.cardGeo, faceUp === false ? self.backMats : self.faceMat(cardId));
       mesh.position.set(x, CARD_T / 2, z);
       mesh.castShadow = self.tier.shadows;
       mesh.userData = { zone: zone, index: index, cardId: cardId, baseY: CARD_T / 2 };

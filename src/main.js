@@ -20,6 +20,31 @@
   }
   window.addEventListener('error', function (e) { track('error', String(e.message).slice(0, 80)); });
 
+  /* captions: text cue for every meaningful sound */
+  const captionEl = document.getElementById('caption-toast');
+  let captionTimer = null;
+  Audio.onCaption(function (text) {
+    if (!UI.settings || !UI.settings.captions) return;
+    captionEl.textContent = text;
+    captionEl.style.display = 'block';
+    if (captionTimer) clearTimeout(captionTimer);
+    captionTimer = setTimeout(function () { captionEl.style.display = 'none'; }, 1800);
+  });
+
+  /* pause/resume the solo AI driver (pause overlay, hidden tab) */
+  function setAIPaused(paused) {
+    const sess = UI.session;
+    if (!sess) return;
+    paused = paused || document.hidden || UI.currentScreen !== 'play' ||
+      !!document.querySelector('#overlay-pause.active, #overlay-settings.active');
+    sess.aiPaused = !!paused;
+    if (paused) {
+      if (sess.aiTimer) { clearTimeout(sess.aiTimer); sess.aiTimer = null; }
+    } else {
+      sess.scheduleAI();
+    }
+  }
+
   /* platform time sync (round-trip adjusted), recoverable on failure */
   function syncTime() {
     const t0 = Date.now();
@@ -86,6 +111,18 @@
     }
   };
 
+  /* the pause overlay halts the solo simulation while it is open */
+  const origOverlay = UI.overlay.bind(UI);
+  UI.overlay = function (id, open) {
+    origOverlay(id, open);
+    setAIPaused(false);
+  };
+  const origShow = UI.show.bind(UI);
+  UI.show = function (name) {
+    origShow(name);
+    setAIPaused(false);
+  };
+
   /* ---------- pointer input: tap vs drag thresholds, pointer capture ---------- */
   const canvas = document.getElementById('gl');
   let downAt = null;
@@ -128,6 +165,7 @@
   document.addEventListener('visibilitychange', function () {
     running = !document.hidden;
     Audio.setBackground(document.hidden);
+    setAIPaused(document.hidden); // backgrounding pauses solo simulation
     if (!document.hidden) syncTime();
   });
 

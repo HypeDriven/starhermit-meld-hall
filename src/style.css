@@ -21,6 +21,13 @@ body.large-text { font-size: 120%; }
 body.high-contrast { --bg:#000; --panel:#000; --panel2:#111; --text:#fff; --muted:#ddd;
   --accent:#ffd700; --focus:#00ffff; }
 
+/* color-vision palettes: red suits and accents move to safely separable hues
+   (suit glyphs already differ, so color is never the only cue) */
+body.palette-deuteranopia, body.palette-protanopia { --accent: #4aa3ff; }
+body.palette-deuteranopia .card-btn.red, body.palette-protanopia .card-btn.red { color: #14568f; }
+body.palette-tritanopia { --accent: #7fd0d8; }
+body.palette-tritanopia .card-btn.red { color: #b03a2e; }
+
 #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
 #gl-wrap { position: absolute; inset: 0; }
 #gl { width: 100%; height: 100%; display: block; touch-action: none; }

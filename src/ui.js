@@ -72,7 +72,20 @@
   UI.prototype.showModeSelect = function (preselect) {
     const list = $('mode-list');
     list.innerHTML = '';
+    const chSel = $('opt-challenge');
+    if (!chSel.options.length) {
+      for (const c of Content.CHALLENGES) {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.title;
+        chSel.appendChild(o);
+      }
+    }
     const self = this;
+    function showOptions(id) {
+      $('mode-options').classList.toggle('hidden', id !== 'practice');
+      $('mode-challenge-options').classList.toggle('hidden', id !== 'challenge');
+    }
     for (const m of MODES) {
       const b = document.createElement('button');
       b.textContent = m.name;
@@ -81,14 +94,14 @@
         self.pendingMode = m.id;
         $('mode-detail').textContent = m.desc + ' Expected duration: ' + m.minutes + '. ' +
           (m.ranked ? 'This result is ranked.' : 'Not ranked.');
-        $('mode-options').classList.toggle('hidden', m.id !== 'practice');
+        showOptions(m.id);
         Audio.play('ui');
       });
       list.appendChild(b);
     }
     this.pendingMode = preselect || 'practice';
     $('mode-detail').textContent = MODES.filter(function (m) { return m.id === self.pendingMode; })[0].desc;
-    $('mode-options').classList.toggle('hidden', this.pendingMode !== 'practice');
+    showOptions(this.pendingMode);
     this.show('mode');
   };
 
@@ -106,7 +119,7 @@
     } else if (m === 'daily') {
       this.attachSession(Session.startDaily(Date.now() + this.serverOffset));
     } else if (m === 'challenge') {
-      this.attachSession(Session.startChallenge('ch_speed'));
+      this.attachSession(Session.startChallenge($('opt-challenge').value || 'ch_speed'));
     } else if (m === 'learn') {
       const seen = (this.settings.tutorialSeen || {});
       let idx = Content.LESSONS.findIndex(function (l) { return !seen[l.id]; });
@@ -398,6 +411,8 @@
     const s = this.settings;
     document.body.classList.toggle('high-contrast', !!s.highContrast);
     document.body.classList.toggle('large-text', !!s.largeText);
+    for (const p of ['deuteranopia', 'protanopia', 'tritanopia'])
+      document.body.classList.toggle('palette-' + p, s.colorPalette === p);
     Audio.applySettings(s);
   };
 

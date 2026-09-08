@@ -153,7 +153,7 @@
     const self = this;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
     if (typeof setTimeout === 'undefined') return;
-    if (this.state.turn === this.humanSeat || this.isOver()) return;
+    if (this.aiPaused || this.state.turn === this.humanSeat || this.isOver()) return;
     const delay = Math.max(250, 900 - this.aiDifficulty * 200);
     this.aiTimer = setTimeout(function () {
       self.aiTimer = null;

@@ -39,10 +39,19 @@ function send(res, code, type, body) {
 function sendJSON(res, code, obj) { send(res, code, 'application/json', JSON.stringify(obj)); }
 
 function serveStatic(req, res) {
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  let urlPath;
+  try { urlPath = decodeURIComponent(req.url.split('?')[0]); }
+  catch (_) { send(res, 400, 'text/plain', 'bad request'); return; }
   if (urlPath === '/') urlPath = '/index.html';
   const file = path.normalize(path.join(ROOT, urlPath));
-  if (!file.startsWith(ROOT)) { send(res, 403, 'text/plain', 'forbidden'); return; }
+  const rel = path.relative(ROOT, file);
+  if (rel === '' || rel.indexOf('..') === 0 || path.isAbsolute(rel)) {
+    send(res, 403, 'text/plain', 'forbidden'); return;
+  }
+  const blocked = rel.split(path.sep).some(function (seg) {
+    return seg.charAt(0) === '.' || seg === 'node_modules';
+  });
+  if (blocked) { send(res, 403, 'text/plain', 'forbidden'); return; }
   fs.readFile(file, function (err, data) {
     if (err) { send(res, 404, 'text/plain', 'not found'); return; }
     send(res, 200, MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', data);

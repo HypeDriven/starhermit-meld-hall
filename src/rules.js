@@ -194,8 +194,8 @@
         while (j + 1 < g.length && rankOf(g[j + 1]) === rankOf(g[j]) + 1) ++j;
         const len = j - i + 1;
         if (len >= 3) {
-          for (let a = i; a <= j; ++a)
-            for (let b = Math.max(j, a + 2); b <= j; ++b)
+          for (let a = i; a <= j - 2; ++a)
+            for (let b = a + 2; b <= j; ++b)
               acts.push({ type: 'meld', cards: g.slice(a, b + 1) });
         }
         i = j + 1;

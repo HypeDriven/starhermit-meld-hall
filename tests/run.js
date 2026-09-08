@@ -173,6 +173,18 @@ test('layoff wrong card rejected', function () {
 test('layoff onto full set rejected by canLayoff', function () {
   assert.strictEqual(Rules.canLayoff(39, [0, 13, 26, 39]), false);
 });
+test('legal actions include sub-runs not ending at the run top', function () {
+  // player 0 holds 3-4-5-6 of clover (ids 2,3,4,5): melding just 3-4-5 must be offered
+  const s = rigState();
+  s.hands[0].cards = [2, 3, 4, 5, 40];
+  const melds = Rules.legalActions(s, 0).filter(function (a) { return a.type === 'meld'; });
+  const hasSubRun = melds.some(function (a) {
+    return a.cards.length === 3 && a.cards.indexOf(2) >= 0 && a.cards.indexOf(3) >= 0 && a.cards.indexOf(4) >= 0;
+  });
+  assert.ok(hasSubRun, 'sub-run [2,3,4] not enumerated: ' + JSON.stringify(melds));
+  const hasFull = melds.some(function (a) { return a.cards.length === 4; });
+  assert.ok(hasFull, 'full run [2,3,4,5] not enumerated');
+});
 
 /* ---------- scoring & terminal ---------- */
 test('going out: winner scores opponents deadwood, breakdown recorded', function () {
