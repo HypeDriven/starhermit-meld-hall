@@ -210,7 +210,23 @@
       g.moveTo(20 + i * 16, 16); g.lineTo(20 + i * 16, 168);
     }
     g.globalAlpha = 0.18; g.stroke(); g.globalAlpha = 1;
-    return new THREE.CanvasTexture(cv);
+    const tex = new THREE.CanvasTexture(cv);
+    // Authored back art (assets/card-back.webp) is tinted over the procedural
+    // pattern once it decodes; if it never loads the procedural back stands.
+    try {
+      const img = new Image();
+      img.onload = function () {
+        g.globalAlpha = 0.85;
+        g.drawImage(img, 6, 6, 116, 172);
+        g.globalAlpha = 1;
+        g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 3;
+        g.strokeRect(8, 8, 112, 168);
+        tex.needsUpdate = true;
+      };
+      img.onerror = function () {};
+      img.src = 'assets/card-back.webp';
+    } catch (_) {}
+    return tex;
   }
   Scene.prototype.faceMat = function (cardId) {
     if (!this.faceTextures[cardId]) {

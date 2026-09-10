@@ -29,7 +29,7 @@ const MIME = {
   '.css': 'text/css; charset=utf-8', '.json': 'application/json',
   '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8',
-  '.opus': 'audio/ogg',
+  '.opus': 'audio/ogg', '.webp': 'image/webp',
 };
 
 function send(res, code, type, body) {

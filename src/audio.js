@@ -93,6 +93,9 @@
     roundWin: ['round-win'],
     roundLose: ['round-lose'],
     achievement: ['achievement-chime'],
+    deal: ['deal-round'],
+    hint: ['hint-shimmer'],
+    matchWin: ['match-win'],
     ui: ['ui-click', 'ui-confirm'],
   };
   const SFX_CAPTIONS = {
@@ -106,6 +109,9 @@
     roundWin: 'Round won',
     roundLose: 'Round lost',
     achievement: 'Achievement unlocked',
+    deal: 'Cards dealt',
+    hint: 'Hint offered',
+    matchWin: 'Match won',
   };
 
   Audio.prototype._loadSample = function (name) {
@@ -168,6 +174,13 @@
         [440, 392, 330].forEach((f, i) => setTimeout(() => this.ctx && tone(this.ctx, fx, f, 0.3, 'sine', 0.15), i * 140));
         this.caption('Round lost'); break;
       case 'achievement': tone(this.ctx, fx, 880, 0.3, 'triangle', 0.2, 1320); this.caption('Achievement unlocked'); break;
+      case 'deal':
+        [0, 90, 180, 270, 360].forEach((d) => setTimeout(() => this.ctx && noise(this.ctx, fx, 0.07, 0.16, 2600), d));
+        this.caption('Cards dealt'); break;
+      case 'hint': tone(this.ctx, fx, 990, 0.12, 'sine', 0.12, 1320); this.caption('Hint offered'); break;
+      case 'matchWin':
+        [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => this.ctx && tone(this.ctx, fx, f, 0.35, 'triangle', 0.2), i * 130));
+        this.caption('Match won'); break;
       case 'ui': tone(this.ctx, fx, 700, 0.05, 'sine', 0.08); break;
     }
   };

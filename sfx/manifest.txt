@@ -1,0 +1,24 @@
+# Meld Hall — canonical SFX manifest
+# format: file | event id | description | usage context
+# Event ids are the argument to MeldAudio.play(<event>) in src/audio.js (SFX_EVENTS).
+# Every event also has a synthesized WebAudio fallback, used while a clip decodes
+# or if it fails to load. All clips: 48 kHz mono Opus, 96 kbps VBR, loudness-normalized
+# to -20 LUFS, generated with MOSS-SoundEffect v2.0 at 100 inference steps.
+
+card-select.opus       | select      | A playing card lifted softly off a wooden table, gentle paper flick. | Card added to the selection (click, tap or Enter/Space on the hand list); rotated with card-deselect.
+card-deselect.opus     | select      | A card set back down onto felt, soft muted paper tap.                | Card removed from the selection; also used for selection clears.
+invalid-buzz.opus      | invalid     | Low dull wooden thunk with a soft muted buzz.                        | Any rejected command (out of turn, wrong phase, illegal meld/layoff); paired with the assertive error live region.
+card-draw.opus         | draw        | Card sliding briskly off the top of the deck, crisp paper swish.     | Draw from the stock (Draw deck button, D key, tapping the 3D deck); rotated with card-draw-take.
+card-draw-take.opus    | draw        | Card plucked from a small table pile, quick light paper snap.        | Draw from the discard pile (Take discard, F key, tapping the discard pile).
+meld-fan.opus          | meld        | Three cards fanned onto polished wood with a warm shimmer.           | A set or run is accepted onto the table; fires with the particle burst.
+layoff-tap.opus        | layoff      | Card tapped and slid next to other cards on felt.                    | A card is laid off onto an existing table meld (L key, meld chip, 3D meld marker).
+card-discard.opus      | discard     | Card tossed onto a discard pile, paper flutter into a soft tap.      | End-of-turn discard by any player, human or AI.
+turn-chime.opus        | turn        | Small gentle bell struck with a wooden mallet, warm mellow ding.     | Turn passes back to the human seat and the draw phase opens.
+deal-round.opus        | deal        | Dealer flicking a row of cards onto felt, rhythmic paper slaps.      | A session is attached (any mode) and when Next round deals a fresh hand.
+hint-shimmer.opus      | hint        | Two high glass bell tones rising, a subtle helpful nudge.            | Hint button or H key; plays with the spoken hint in the polite live region.
+round-win.opus         | roundWin    | Warm cascade of small brass bells with a short rising harp gliss.    | Results screen when the human seat took the round but the match continues.
+round-lose.opus        | roundLose   | Descending wooden marimba phrase of three soft low notes.            | Results screen when an opponent went out or won the match.
+match-win.opus         | matchWin    | Restrained brass-and-harp fanfare settling into a sustained chord.   | Results screen when the human seat reaches the target score and wins the match.
+achievement-chime.opus | achievement | Bright glockenspiel chime with a shimmering ringing tail.            | Each achievement unlocked at round end, and lesson completion in Learn mode.
+ui-click.opus          | ui          | Short soft wooden button click, muted and dry.                       | Menu and mode-list buttons; rotated with ui-confirm.
+ui-confirm.opus        | ui          | Gentle wooden tick with a subtle warm resonance.                     | Settings controls committing a change.

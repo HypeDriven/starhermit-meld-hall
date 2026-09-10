@@ -138,6 +138,7 @@
     this.show('play');
     this.syncAll();
     this.announce(this.objectiveText());
+    Audio.play('deal');
     session.scheduleAI();
   };
 
@@ -318,7 +319,7 @@
     else if (a.type === 'layoff') msg = 'Hint: lay ' + Rules.cardName(a.card) + ' onto meld ' + a.meld + '.';
     else msg = 'Hint: discard ' + Rules.cardName(a.card) + '.';
     this.announce(msg);
-    Audio.play('select');
+    Audio.play('hint');
   };
 
   UI.prototype.toggleCard = function (cardId) {
@@ -358,7 +359,8 @@
       : '';
     $('btn-results-next').textContent = r.phase === 'roundOver' ? 'Next round' : 'Play again';
     this.show('results');
-    Audio.play(r.humanWon ? 'roundWin' : 'roundLose');
+    Audio.play(r.phase === 'matchOver' && r.matchWinner === s.humanSeat ? 'matchWin'
+      : r.humanWon ? 'roundWin' : 'roundLose');
     this.announce($('results-headline').textContent);
   };
 
@@ -497,7 +499,7 @@
     click('btn-results-replay', function () { self.replayLast(); });
     click('btn-results-next', function () {
       const s = self.session;
-      if (s && s.state.phase === 'roundOver') { s.nextRound(); self.show('play'); self.syncAll(); }
+      if (s && s.state.phase === 'roundOver') { s.nextRound(); self.show('play'); self.syncAll(); Audio.play('deal'); }
       else if (s) {
         if (s.mode === 'journey' && s.resultSummary && s.resultSummary.matchWinner === s.humanSeat) {
           const next = Math.min(Content.STAGES.length - 1, s.contentRef.index + 1);

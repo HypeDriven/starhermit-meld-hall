@@ -82,5 +82,23 @@
     "seconds": 1,
     "prompt": "A gentle wooden tick with a subtle warm resonance, soft interface confirmation tap, no music.",
     "event": "ui"
+  },
+  {
+    "name": "deal-round",
+    "seconds": 3,
+    "prompt": "A dealer swiftly dealing a row of playing cards onto a felt table, several light rhythmic paper slaps in quick succession, warm and close, no music.",
+    "event": "deal"
+  },
+  {
+    "name": "hint-shimmer",
+    "seconds": 1,
+    "prompt": "A soft quick shimmer of two high glass bell tones rising gently, a subtle helpful nudge cue, quiet and clean, no music.",
+    "event": "hint"
+  },
+  {
+    "name": "match-win",
+    "seconds": 4,
+    "prompt": "An elegant restrained fanfare of warm brass bells and a soft harp roll settling into a gentle sustained chord, cozy card hall championship moment, no vocals.",
+    "event": "matchWin"
   }
 ]

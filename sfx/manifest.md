@@ -1,6 +1,7 @@
 # SFX manifest — meld-hall
 
 Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-normalized; 100 inference steps).
+Canonical mapping (file, event id, description, usage context) lives in `sfx/manifest.txt`.
 
 | file | event | prompt |
 |---|---|---|
@@ -18,3 +19,6 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | achievement-chime.opus | achievement | A bright sparkling glockenspiel chime with a shimmering ringing tail, small elegant triumph fanfare, no music. |
 | ui-click.opus | ui | A short soft wooden button click, muted warm and dry, subtle interface press, no music. |
 | ui-confirm.opus | ui | A gentle wooden tick with a subtle warm resonance, soft interface confirmation tap, no music. |
+| deal-round.opus | deal | A dealer swiftly dealing a row of playing cards onto a felt table, several light rhythmic paper slaps in quick succession, warm and close, no music. |
+| hint-shimmer.opus | hint | A soft quick shimmer of two high glass bell tones rising gently, a subtle helpful nudge cue, quiet and clean, no music. |
+| match-win.opus | matchWin | An elegant restrained fanfare of warm brass bells and a soft harp roll settling into a gentle sustained chord, cozy card hall championship moment, no vocals. |
