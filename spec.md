@@ -18,15 +18,17 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | Session | One round 2–4 min; a match to the target score 5–15 min |
 | Platforms | Desktop and mobile browsers, portrait and landscape |
 | Rendering | Three.js card table on `<canvas id="gl">`, with a complete semantic DOM mirror layered above it — the DOM is playable on its own when WebGL is unavailable |
-| Networking | Optional `server.js`: static host, `/api/v1/time`, and an authoritative WebSocket at `/ws` |
+| Networking | Optional `server.js`: static host, `/api/v1/time`, and an authoritative WebSocket at `/ws`; StarHermit platform glue (launch token, identity, cloud save) in `src/platform.js` |
 
 ### File map
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | All five screens plus two overlays as static markup; loads the seven scripts in dependency order |
+| `index.html` | All five screens plus two overlays as static markup; loads the nine scripts in dependency order |
 | `src/rules.js` | Pure deterministic rules engine (`window.MeldRules` / CommonJS). No DOM, no timers |
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
+| `src/platform.js` | `MeldPlatform`: launch-token read/strip, Bearer auth + 45-min refresh, profile nickname, zip cloud-save mirror, read-only leaderboard, sync status |
+| `src/net.js` | `MeldNet`: hosted-table connector to the game's own `/ws` backend (host/join/commands/snapshots); silent capability probe |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
 | `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
 | `src/render.js` | `MeldRender`: the 3D hall, procedural card textures, picking, particles, quality tiers |
@@ -35,7 +37,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/style.css` | Layout, palette, contrast/large-text/colour-vision variants, safe-area padding |
 | `src/three.min.js`, `src/three.module.js` | Vendored Three.js r170 |
 | `server.js` | Static server + time/health endpoints + authoritative hosted sessions over raw RFC6455 frames |
-| `tests/run.js` | 51 offline tests: rules, scoring, fuzzing, replay determinism, content validation |
+| `tests/run.js` | 55 offline tests: rules, scoring, fuzzing, replay determinism, content validation, platform zip/JWT |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
 | `assets/` | Authored images: hall key art, results still, card-back art |
@@ -441,27 +443,46 @@ tray wraps, so a 30–40% expansion in German or French costs height, never clip
 - *Platform time.* `GET /api/v1/time` → `{now}`; the client round-trip-corrects it into
   `UI.serverOffset` and derives the daily challenge day from it, so the daily rolls on host time
   rather than a device clock. A failed fetch silently falls back to the local clock.
+- *Launch token + identity.* `src/platform.js` reads `#game_token=<jwt>` once (query
+  `?token=`/`?launch=` fallback for local dev), strips it via `history.replaceState`, decodes
+  `sub`/`game_scope`, sends `Authorization: Bearer` on every call, and re-mints the token every
+  45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry). The profile line reads
+  "Playing as \<nickname\>" from `GET /api/v1/users/{sub}/profile` (`"Player " + id.slice(0,8)`
+  fallback; never `/api/v1/me`, never usernames) plus a sync status (syncing/saving/synced/offline).
+- *Cloud save.* Progress mirrors to the single platform slot
+  `GET/PUT /api/v1/me/cloud-saves/meld-hall` as a stored zip (`progress.json`) + base64. Load is
+  remote-preferred (404 = keep local); saves debounce 2 s and flush on `pagehide`/tab hide.
+  `meldhall.save.v1` localStorage remains the offline cache.
+- *Daily board (read-only).* Daily results fetch `GET /api/v1/games/{slug}` → `leaderboardId`,
+  then `GET /api/v1/leaderboards/{id}/entries`, resolving userIds to nicknames. Clients never
+  submit scores; personal bests stay in the save doc.
 - *Authoritative hosted sessions.* `WS /ws` runs the same rules engine server-side: `create`,
   `join`, `sync`, `command`. The server binds the seat from the socket (a client-supplied
   `player` field is overwritten), dedupes by command id, rejects payloads over 4 KB, rejects
   fragmented frames, answers pings, broadcasts a snapshot with its state hash after every accepted
   command, and emits a `result` frame on round or match end. Dead sessions are swept after 6 hours.
+  Clients connect with `?access_token=` when signed in; a table created with a token requires
+  joiners to present one (`auth_required`). `src/net.js` + the Hosted mode in `ui.js` expose it:
+  host a table (share the 8-character code) or join by code; a silent WS probe gates the entry.
 
 **Not used**
 
-Platform identity, presence, leaderboards, achievement sync, cloud saves and matchmaking. The
-profile line reads "Guest profile — progress is saved on this device"; achievements and career
-stats are local to `meldhall.save.v1`, and the client has no `/ws` connector yet, so hosted play is
-server-complete but not exposed in the UI.
+Presence, telemetry/activity and server-side achievement sync — achievements and career stats
+stay local (inside the cloud-saved progress doc), and the local funnel is never transmitted.
+Score submission to leaderboards does not exist (read-only board, above). Realtime-rooms
+matchmaking/friends invites are not used: hosted tables use the game's own authoritative `/ws`
+backend (declared `server=server.js`) rather than platform-routed rooms.
 
 ---
 
 ## 13. Technical architecture
 
-**Module graph.** `rules.js` and `content.js` depend on nothing; `session.js` depends on both;
-`audio.js` and `render.js` are leaves; `ui.js` composes rules/content/session/audio; `main.js`
-wires ui ↔ render and owns the browser lifecycle. Every module is a UMD factory, so `tests/run.js`
-requires the engine in plain Node with no build step and no dependencies.
+**Module graph.** `rules.js` and `content.js` depend on nothing; `platform.js` and `net.js`
+depend only on `rules`/`platform` (and browser globals, all guarded, so both load in Node for
+tests); `session.js` depends on rules+content; `audio.js` and `render.js` are leaves; `ui.js`
+composes rules/content/session/audio/platform/net; `main.js` wires ui ↔ render and owns the
+browser lifecycle. Every module is a UMD factory, so `tests/run.js` requires the engine in plain
+Node with no build step and no dependencies.
 
 **Determinism and replay.** All hidden information derives from one 32-bit seed. `buildReplay`
 emits `{schema, rulesVersion, seed, options, commands, hashes, terminal}`; `verifyReplay` re-runs
@@ -492,7 +513,7 @@ click and to wait for the AI, never to mutate state.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `tests/run.js`, 51 assertions, no dependencies:
+`npm test` → `tests/run.js`, 55 assertions, no dependencies:
 
 - meld validity, card values, sub-run enumeration, deal shape and per-seed determinism;
 - rejection paths (out of turn, malformed, double draw, discard before draw, bad meld shape,
@@ -559,9 +580,11 @@ weight without changing the silhouette.
 
 ## 16. Known limitations
 
+- **Hosted tables are 2-player, this backend only.** The Hosted mode appears only when the
+  game's own `/ws` server answers (a silent probe); it does not use platform realtime rooms, has
+  no rematch flow (the table closes at match end), and the results *Replay* button is inert for
+  hosted tables (the server does not send a replay envelope).
 - **English only.** No string table, no locale switch (section 10).
-- **Hosted play has no client.** `/ws` is fully implemented and authoritative, but no UI creates or
-  joins a hosted session, so multiplayer is unreachable from the game.
 - **Challenge constraints are advisory.** `ch_speed`'s 25-turn limit and `ch_frugal`'s 5-deadwood
   cap are stated in the objective text but not enforced or verified by the rules engine; only
   `ch_crowd`'s seat count actually changes play.
@@ -581,9 +604,9 @@ weight without changing the silhouette.
 1. **Nine locales.** en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT, selected from
    `navigator.language` with a manual override in Settings, backed by a JSON string table under
    `data/` and a `t(key)` lookup replacing the literals in `ui.js`, `content.js` and `index.html`.
-2. **Hosted play in the client.** A Hosted entry on the mode list that opens a `/ws` connection,
-   shows the session code, and reconnects through the existing `sync` op.
 3. **Enforced challenge goals.** Turn and deadwood constraints evaluated in the session driver so a
    challenge can be failed, with the failure reason shown on the results screen.
-4. **Platform identity and leaderboards.** Replacing the guest profile line with a StarHermit
-   identity, and posting daily-challenge results to a shared board.
+4. **Hosted-table polish and score submission.** Reconnect through the existing `sync` op, a
+   rematch flow, and platform-routed realtime rooms (matchmaking/friend invites) instead of the
+   game's own `/ws` backend. Ranked daily submission to the shared board (the board is read-only
+   today because clients cannot post scores).

@@ -47,6 +47,14 @@
         <div class="field"><label for="opt-challenge">Challenge</label>
           <select id="opt-challenge"></select></div>
       </div>
+      <div id="mode-hosted-options" class="menu-grid hidden">
+        <div class="field"><label for="opt-join-code">Table code</label>
+          <input id="opt-join-code" type="text" maxlength="8" spellcheck="false" autocomplete="off"
+                 placeholder="8-character code"></div>
+        <button id="btn-join-table">Join a table</button>
+        <button id="btn-host-table" class="primary">Host a table</button>
+      </div>
+      <p id="hosted-status" class="muted hidden" aria-live="polite"></p>
       <div class="row spread">
         <button id="btn-mode-back">Back</button>
         <button id="btn-mode-start" class="primary">Start</button>
@@ -107,6 +115,7 @@
       <p id="results-headline"></p>
       <table class="score-table" id="results-table" aria-label="Score breakdown"></table>
       <div id="results-achievements"></div>
+      <div id="results-board"></div>
       <div class="row spread">
         <button id="btn-results-leave">Leave</button>
         <div class="row">
@@ -185,6 +194,8 @@
 <script src="./src/three.min.js"></script>
 <script src="./src/rules.js"></script>
 <script src="./src/content.js"></script>
+<script src="./src/platform.js"></script>
+<script src="./src/net.js"></script>
 <script src="./src/session.js"></script>
 <script src="./src/audio.js"></script>
 <script src="./src/render.js"></script>

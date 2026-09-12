@@ -11,6 +11,8 @@
   const Audio = window.MeldAudio;
   const Render = window.MeldRender;
   const UI = window.MeldUI;
+  const Platform = window.MeldPlatform || null;
+  const Net = window.MeldNet || null;
 
   /* anonymous funnel events (start, tutorial step, round end, retry, settings, error) */
   const funnel = [];
@@ -45,10 +47,14 @@
     }
   }
 
-  /* platform time sync (round-trip adjusted), recoverable on failure */
+  /* platform time sync (round-trip adjusted), recoverable on failure.
+     Authenticated when a launch token is present; silent otherwise. */
   function syncTime() {
     const t0 = Date.now();
-    fetch('/api/v1/time').then(function (r) { return r.json(); }).then(function (j) {
+    const req = (Platform && Platform.enabled())
+      ? Platform.api('/api/v1/time')
+      : fetch('/api/v1/time').then(function (r) { return r.json(); });
+    Promise.resolve(req).then(function (j) {
       if (j && typeof j.now === 'number') {
         const t1 = Date.now();
         UI.serverOffset = j.now - Math.round((t0 + t1) / 2);
@@ -180,6 +186,18 @@
 
   /* ---------- boot: boot -> title -> profile-ready ---------- */
   UI.bindSettings(Session.loadSettings(), function (key) { track('settings_change', key); });
+
+  /* StarHermit platform: launch token (fragment read once + stripped),
+     identity, cloud-save mirror, sync status, hosted-table probe. */
+  if (Platform) {
+    Platform.boot(Session);
+    Platform.onSync(function () { UI.refreshTitle(); });
+    Platform.initCloud(Session).then(function (mergedRemote) {
+      if (mergedRemote) UI.refreshTitle(); // remote progress reseeded the cache
+    });
+  }
+  if (Net) Net.probe().then(function (ok) { UI.hostedAvailable = ok; });
+
   UI.show('title');
   UI.refreshTitle();
   syncTime();

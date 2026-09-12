@@ -5,12 +5,19 @@
  * UI state is kept separate from simulation state.
  */
 (function (root, factory) {
-  const api = factory(root.MeldRules, root.MeldContent, root.MeldSession, root.MeldAudio);
+  const api = factory(root.MeldRules, root.MeldContent, root.MeldSession, root.MeldAudio,
+    root.MeldPlatform || null, root.MeldNet || null);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.MeldUI = api;
-})(typeof self !== 'undefined' ? self : globalThis, function (Rules, Content, Session, Audio) {
+})(typeof self !== 'undefined' ? self : globalThis, function (Rules, Content, Session, Audio, Platform, Net) {
 
   function $(id) { return document.getElementById(id); }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
 
   const SCREENS = ['title', 'mode', 'play', 'results', 'help'];
 
@@ -23,6 +30,9 @@
     this.serverOffset = 0;        // platform time offset (ms)
     this.onRenderRequest = null;  // set by main.js
     this.helpReturn = 'title';
+    this.hostedAvailable = false; // set async by main.js after the /ws probe
+    this.pendingHosted = null;    // HostedSession waiting in the lobby
+    this.pendingHostedReady = false;
     this._bind();
   }
 
@@ -58,6 +68,13 @@
     $('journey-progress').textContent = p.journeyUnlocked + '/' + Content.STAGES.length;
     const d = Content.dailyFor(new Date(Date.now() + this.serverOffset));
     $('daily-date').textContent = d.day;
+    const line = $('profile-line');
+    if (Platform && Platform.enabled()) {
+      line.textContent = 'Playing as ' + Platform.displayName() + ' — progress ' +
+        Platform.statusText() + '.';
+    } else {
+      line.textContent = 'Guest profile — progress is saved on this device.';
+    }
   };
 
   /* ---------- mode select ---------- */
@@ -68,6 +85,10 @@
     { id: 'challenge', name: 'Challenge', desc: 'Constrained goals: turn limits, deadwood targets, crowded tables.', ranked: false, minutes: '5–10 min' },
     { id: 'learn', name: 'Learn', desc: 'Interactive lessons. One rule at a time; you perform each action.', ranked: false, minutes: '2 min' },
   ];
+  const HOSTED_MODE = {
+    id: 'hosted', name: 'Hosted', ranked: false, minutes: '10–20 min',
+    desc: 'Two-player table on the Meld Hall server. Host a table and share the code, or join one.',
+  };
 
   UI.prototype.showModeSelect = function (preselect) {
     const list = $('mode-list');
@@ -81,12 +102,17 @@
         chSel.appendChild(o);
       }
     }
+    this.resetHostedPanel();
     const self = this;
     function showOptions(id) {
       $('mode-options').classList.toggle('hidden', id !== 'practice');
       $('mode-challenge-options').classList.toggle('hidden', id !== 'challenge');
+      $('mode-hosted-options').classList.toggle('hidden', id !== 'hosted');
+      $('hosted-status').classList.toggle('hidden', id !== 'hosted');
     }
-    for (const m of MODES) {
+    const modes = MODES.slice();
+    if (this.hostedAvailable && Net) modes.push(HOSTED_MODE);
+    for (const m of modes) {
       const b = document.createElement('button');
       b.textContent = m.name;
       b.setAttribute('aria-describedby', 'mode-detail');
@@ -100,9 +126,76 @@
       list.appendChild(b);
     }
     this.pendingMode = preselect || 'practice';
-    $('mode-detail').textContent = MODES.filter(function (m) { return m.id === self.pendingMode; })[0].desc;
+    if (this.pendingMode === 'hosted' && modes.indexOf(HOSTED_MODE) < 0) this.pendingMode = 'practice';
+    $('mode-detail').textContent = modes.filter(function (m) { return m.id === self.pendingMode; })[0].desc;
     showOptions(this.pendingMode);
     this.show('mode');
+  };
+
+  /* ---------- hosted table lobby ---------- */
+  UI.prototype.resetHostedPanel = function () {
+    if (this.pendingHosted) { this.pendingHosted.close(); this.pendingHosted = null; }
+    this.pendingHostedReady = false;
+    const host = $('btn-host-table'), join = $('btn-join-table'), code = $('opt-join-code');
+    if (host) { host.disabled = false; join.disabled = false; code.disabled = false; }
+    const st = $('hosted-status');
+    if (st) { st.textContent = ''; st.classList.add('hidden'); }
+  };
+  UI.prototype.setHostedStatus = function (text) {
+    const st = $('hosted-status');
+    st.textContent = text;
+    st.classList.toggle('hidden', !text);
+  };
+  UI.prototype.onHostedLobbyEvent = function (evt) {
+    if (evt.type === 'peerJoined' && this.pendingHosted) {
+      this.pendingHostedReady = true;
+      this.setHostedStatus('Opponent seated at table ' + this.pendingHosted.sessionId +
+        ' — press Start when ready.');
+      Audio.play('ui');
+    } else if (evt.type === 'connectionLost' && this.pendingHosted) {
+      this.pendingHostedReady = false;
+      this.setHostedStatus('Connection to the table was lost. Host or join again.');
+    }
+  };
+  UI.prototype.hostTable = function () {
+    const self = this;
+    if (!Net) return;
+    this.setHostedStatus('Opening a table…');
+    Net.host().then(function (hs) {
+      self.pendingHosted = hs;
+      hs.on(function (evt) { self.onHostedLobbyEvent(evt); });
+      self.setHostedStatus('Table code: ' + hs.sessionId + ' — waiting for your opponent…');
+      $('btn-host-table').disabled = true;
+      $('btn-join-table').disabled = true;
+      $('opt-join-code').disabled = true;
+    }).catch(function (err) {
+      self.setHostedStatus('Could not open a table (' + (err && err.message || 'error') + ').');
+    });
+  };
+  UI.prototype.joinTable = function () {
+    const self = this;
+    if (!Net) return;
+    const code = $('opt-join-code').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{1,8}$/.test(code)) {
+      this.setHostedStatus('Enter the 8-character table code the host shares.');
+      return;
+    }
+    this.setHostedStatus('Joining table ' + code + '…');
+    Net.join(code).then(function (hs) {
+      self.pendingHosted = hs;
+      hs.on(function (evt) { self.onHostedLobbyEvent(evt); });
+      self.pendingHostedReady = true;
+      $('btn-host-table').disabled = true;
+      $('btn-join-table').disabled = true;
+      $('opt-join-code').disabled = true;
+      self.setHostedStatus('Seated at table ' + hs.sessionId + ' — press Start.');
+    }).catch(function (err) {
+      const reason = err && err.message;
+      self.setHostedStatus(reason === 'no_such_session' ? 'No table with that code.'
+        : reason === 'session_full' ? 'That table already has two players.'
+        : reason === 'auth_required' ? 'That table requires a signed-in player.'
+        : 'Could not join (' + (reason || 'error') + ').');
+    });
   };
 
   UI.prototype.startPendingMode = function () {
@@ -125,6 +218,15 @@
       let idx = Content.LESSONS.findIndex(function (l) { return !seen[l.id]; });
       if (idx < 0) idx = 0;
       this.attachSession(Session.startLearn(idx));
+    } else if (m === 'hosted') {
+      if (this.pendingHosted && this.pendingHostedReady) {
+        const hs = this.pendingHosted;
+        this.pendingHosted = null;
+        this.pendingHostedReady = false;
+        this.attachSession(hs);
+      } else {
+        this.setHostedStatus('Host a table or join one with a code first.');
+      }
     }
   };
 
@@ -148,7 +250,16 @@
     const st = s.state;
     if (s.mode === 'learn' && s.contentRef) return s.contentRef.title + ' — ' + s.contentRef.text;
     if (s.mode === 'challenge' && s.contentRef) return s.contentRef.title + ': ' + s.contentRef.text;
+    if (s.mode === 'hosted') return 'Hosted table ' + (s.sessionId || '') + ' — first to ' +
+      st.targetScore + ' points wins the match. Go out with an empty hand to win the round.';
     return 'Round ' + st.round + ' — first to ' + st.targetScore + ' points wins the match. Go out with an empty hand to win the round.';
+  };
+
+  // Display name for a seat: hosted tables use the seated players' names.
+  UI.prototype.nameFor = function (p) {
+    const s = this.session;
+    if (s && s.playerName) return s.playerName(p);
+    return p === (s ? s.humanSeat : 0) ? 'You' : 'Opponent ' + (p + 1);
   };
 
   UI.prototype.onSessionEvent = function (evt) {
@@ -156,6 +267,23 @@
     if (evt.type === 'invalid') {
       Audio.play('invalid');
       this.announceError('Action rejected: ' + this.reasonText(evt.reason));
+      return;
+    }
+    if (evt.type === 'peerLeft' || evt.type === 'connectionLost') {
+      Audio.play('ui');
+      if (s && !s.isOver()) {
+        this.announceError(evt.type === 'peerLeft'
+          ? 'Your opponent left the table.'
+          : 'The connection to the table was lost.');
+        if (s.close) s.close();
+        this.session = null;
+        this.show('title');
+        this.refreshTitle();
+      } else {
+        this.announceError(evt.type === 'peerLeft'
+          ? 'Your opponent left the table.'
+          : 'The connection to the table was lost.');
+      }
       return;
     }
     if (evt.type === 'lessonComplete') {
@@ -220,7 +348,7 @@
     $('hud-turn').textContent = st.phase === 'matchOver' ? 'Match over'
       : st.phase === 'roundOver' ? 'Round over'
       : st.turn === s.humanSeat ? (st.phase === 'draw' ? 'Your turn — draw' : 'Your turn — meld / discard')
-      : 'Opponent ' + (st.turn + 1) + ' is thinking…';
+      : this.nameFor(st.turn) + ' is thinking…';
     $('hud-deck').textContent = 'Deck: ' + st.deck.length;
     $('hud-score').textContent = 'You ' + st.scores[s.humanSeat] + ' — best rival ' +
       Math.max.apply(null, st.scores.filter(function (_, i) { return i !== s.humanSeat; }).concat([0]));
@@ -233,7 +361,7 @@
     rs.innerHTML = '';
     for (let p = 0; p < st.players; ++p) {
       const div = document.createElement('div');
-      div.textContent = (p === s.humanSeat ? 'You' : 'Opponent ' + (p + 1)) + ': ' + st.scores[p] +
+      div.textContent = this.nameFor(p) + ': ' + st.scores[p] +
         ' (' + st.hands[p].cards.length + ' cards)';
       if (p === s.humanSeat) div.style.color = 'var(--accent)';
       rs.appendChild(div);
@@ -338,13 +466,13 @@
     $('results-h').textContent = r.phase === 'matchOver' ? 'Match over' : 'Round ' + b.round + ' over';
     $('results-headline').textContent = r.humanWon
       ? 'You took the round! ' + b.pointsAwarded + ' points from deadwood.'
-      : (r.phase === 'matchOver' && r.matchWinner !== s.humanSeat ? 'Opponent ' + (r.matchWinner + 1) + ' wins the match.'
-        : 'Opponent ' + (b.winner + 1) + ' went out and scored ' + b.pointsAwarded + '.');
+      : (r.phase === 'matchOver' && r.matchWinner !== s.humanSeat ? this.nameFor(r.matchWinner) + ' wins the match.'
+        : this.nameFor(b.winner) + ' went out and scored ' + b.pointsAwarded + '.');
     const tbl = $('results-table');
     let html = '<tr><th>Player</th><th>Deadwood</th><th>Match score</th></tr>';
     for (let p = 0; p < s.state.players; ++p) {
       html += '<tr' + (p === s.humanSeat ? ' class="you"' : '') + '><td>' +
-        (p === s.humanSeat ? 'You' : 'Opponent ' + (p + 1)) + (p === b.winner ? ' ★' : '') + '</td><td>' +
+        esc(this.nameFor(p)) + (p === b.winner ? ' ★' : '') + '</td><td>' +
         b.deadwood[p] + '</td><td>' + b.totals[p] + ' / ' + s.state.targetScore + '</td></tr>';
     }
     html += '<tr><td colspan="3" class="muted">Reason: ' + (b.reason === 'player_out' ? 'a player emptied their hand' : 'the deck ran out') +
@@ -357,11 +485,31 @@
           return '<p><span class="badge">Achievement</span> <strong>' + a.title + '</strong> — ' + a.text + '</p>';
         }).join('')
       : '';
+    this.showDailyBoard();
     $('btn-results-next').textContent = r.phase === 'roundOver' ? 'Next round' : 'Play again';
     this.show('results');
     Audio.play(r.phase === 'matchOver' && r.matchWinner === s.humanSeat ? 'matchWin'
       : r.humanWon ? 'roundWin' : 'roundLose');
     this.announce($('results-headline').textContent);
+  };
+
+  // Daily is the ranked mode: show the shared board read-only when the
+  // platform exposes one; personal bests stay local regardless.
+  UI.prototype.showDailyBoard = function () {
+    const board = $('results-board');
+    board.innerHTML = '';
+    const s = this.session;
+    if (!s || s.mode !== 'daily' || !Platform || !Platform.enabled()) return;
+    board.innerHTML = '<p class="muted">Loading daily board…</p>';
+    Platform.fetchLeaderboard().then(function (entries) {
+      board.innerHTML = (!entries || !entries.length) ? '' :
+        '<h3>Daily board</h3>' +
+        '<table class="score-table"><tr><th>#</th><th>Player</th><th>Score</th></tr>' +
+        entries.map(function (e) {
+          return '<tr><td>' + e.rank + '</td><td>' + esc(e.name) + '</td><td>' + e.score + '</td></tr>';
+        }).join('') + '</table>' +
+        '<p class="muted">Read-only board — personal bests are kept in your save.</p>';
+    });
   };
 
   /* ---------- help ---------- */
@@ -470,8 +618,15 @@
     click('btn-learn', function () { self.pendingMode = 'learn'; self.startPendingMode(); });
     click('btn-help', function () { self.showHelp('title'); });
     click('btn-settings', function () { self.overlay('overlay-settings', true); });
-    click('btn-mode-back', function () { self.show('title'); self.refreshTitle(); });
+    click('btn-mode-back', function () {
+      if (self.pendingHosted) { self.pendingHosted.close(); self.pendingHosted = null; }
+      self.pendingHostedReady = false;
+      self.show('title');
+      self.refreshTitle();
+    });
     click('btn-mode-start', function () { self.startPendingMode(); });
+    click('btn-host-table', function () { self.hostTable(); });
+    click('btn-join-table', function () { self.joinTable(); });
 
     click('act-draw-deck', function () { self.doDraw('deck'); });
     click('act-draw-discard', function () { self.doDraw('discard'); });
@@ -488,6 +643,7 @@
     click('btn-leave', function () {
       self.overlay('overlay-pause', false);
       if (self.session && self.session.aiTimer) clearTimeout(self.session.aiTimer);
+      if (self.session && self.session.close) self.session.close();
       self.session = null;
       self.show('title'); self.refreshTitle();
     });
@@ -495,10 +651,20 @@
     click('btn-help-back', function () {
       if (self.helpReturn === 'play') self.show('play'); else { self.show('title'); self.refreshTitle(); }
     });
-    click('btn-results-leave', function () { self.session = null; self.show('title'); self.refreshTitle(); });
+    click('btn-results-leave', function () {
+      if (self.session && self.session.close) self.session.close();
+      self.session = null; self.show('title'); self.refreshTitle();
+    });
     click('btn-results-replay', function () { self.replayLast(); });
     click('btn-results-next', function () {
       const s = self.session;
+      if (s && s.mode === 'hosted' && s.state.phase !== 'roundOver') {
+        // hosted match over (or abandoned): the table closes, no rematch flow
+        if (s.close) s.close();
+        self.session = null;
+        self.show('title'); self.refreshTitle();
+        return;
+      }
       if (s && s.state.phase === 'roundOver') { s.nextRound(); self.show('play'); self.syncAll(); Audio.play('deal'); }
       else if (s) {
         if (s.mode === 'journey' && s.resultSummary && s.resultSummary.matchWinner === s.humanSeat) {
@@ -531,6 +697,10 @@
   UI.prototype.replayLast = function () {
     const s = this.session;
     if (!s || !s.resultSummary) return;
+    if (!s.resultSummary.replay) {
+      this.announce('Replay is not available for hosted tables.');
+      return;
+    }
     const env = s.resultSummary.replay;
     const v = Rules.verifyReplay(env);
     this.announce(v.ok ? 'Replay verified: identical final state.' : 'Replay mismatch: ' + v.reason);

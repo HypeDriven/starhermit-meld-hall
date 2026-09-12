@@ -14,6 +14,12 @@
  *   c->s { op:'command', sessionId, command }  -> { op:'ack', tick } or { op:'reject', reason }
  *   s->c { op:'state', snapshot }              -> after every accepted command
  *   c->s { op:'sync', sessionId }              -> { op:'state', snapshot }  (reconnect)
+ *
+ * Auth: clients connect to /ws?access_token=<launch jwt>. The payload sub is
+ * recorded (no signature verification — the platform fronts this host) and a
+ * table created with a token requires joiners to present one too
+ * ({ op:'reject', reason:'auth_required' }). Without tokens the table is open
+ * (local dev).
  */
 const http = require('http');
 const fs = require('fs');
@@ -63,6 +69,16 @@ const sessions = new Map(); // id -> { id, state, clients: Map<seat,ws>, names, 
 
 function newSessionId() { return crypto.randomBytes(4).toString('hex'); }
 
+// Launch-token payload peek (base64url, no verify) — used for auth carry only.
+function decodeJwtSub(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return payload && payload.sub ? String(payload.sub) : null;
+  } catch (_) { return null; }
+}
+
 function snapshotFor(sess) {
   return {
     sessionId: sess.id,
@@ -90,9 +106,10 @@ function handleMessage(ws, raw) {
       state: Rules.initialState(seed, { players: 2, targetScore: 50 }),
       clients: new Map(), names: ['player', 'player'], createdAt: Date.now(),
       seenCommands: new Set(),
+      authRequired: !!ws._sub,
     };
     sess.clients.set(0, ws);
-    sess.names[0] = String(msg.name || 'Host').slice(0, 24);
+    sess.names[0] = String(msg.name || (ws._sub ? 'Player ' + ws._sub.slice(0, 8) : 'Host')).slice(0, 24);
     ws._session = id; ws._seat = 0;
     sessions.set(id, sess);
     return sendWS(ws, { op: 'created', sessionId: id, seat: 0, snapshot: snapshotFor(sess) });
@@ -101,10 +118,11 @@ function handleMessage(ws, raw) {
   if (msg.op === 'join') {
     const sess = sessions.get(msg.sessionId);
     if (!sess) return sendWS(ws, { op: 'reject', reason: 'no_such_session' });
+    if (sess.authRequired && !ws._sub) return sendWS(ws, { op: 'reject', reason: 'auth_required' });
     if (sess.clients.has(1) && sess.clients.get(1).readyState !== 0 && !sess.clients.get(1).destroyed)
       return sendWS(ws, { op: 'reject', reason: 'session_full' });
     sess.clients.set(1, ws);
-    sess.names[1] = String(msg.name || 'Guest').slice(0, 24);
+    sess.names[1] = String(msg.name || (ws._sub ? 'Player ' + ws._sub.slice(0, 8) : 'Guest')).slice(0, 24);
     ws._session = sess.id; ws._seat = 1;
     sendWS(ws, { op: 'joined', seat: 1, snapshot: snapshotFor(sess) });
     return broadcast(sess, { op: 'state', snapshot: snapshotFor(sess), note: 'opponent_joined' });
@@ -172,6 +190,10 @@ function acceptSocket(req, socket) {
     'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n'
   );
   socket.setNoDelay(true);
+  try {
+    const q = new URLSearchParams((req.url.split('?')[1] || ''));
+    socket._sub = decodeJwtSub(q.get('access_token'));
+  } catch (_) { socket._sub = null; }
 
   let buf = Buffer.alloc(0);
   socket.on('data', function (chunk) {

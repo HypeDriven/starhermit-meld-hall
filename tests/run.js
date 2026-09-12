@@ -381,5 +381,45 @@ test('progression: achievements are idempotent', function () {
   assert.deepStrictEqual(u2, []);
 });
 
+/* ---------- platform module (zip codec, jwt decode) ---------- */
+const Platform = require('../src/platform.js');
+test('platform: stored zip round-trips bytes', function () {
+  const data = new TextEncoder().encode(JSON.stringify({ career: { rounds: 3 }, hello: 'héllo' }));
+  const zip = Platform.zipStore('progress.json', data);
+  assert.strictEqual(zip[0], 0x50); assert.strictEqual(zip[1], 0x4b); // 'PK'
+  assert.strictEqual(Platform.unzipFirstEntry(zip).length, data.length);
+  assert.strictEqual(new TextDecoder().decode(Platform.unzipFirstEntry(zip)), new TextDecoder().decode(data));
+});
+test('platform: zip has exactly one well-formed central-directory entry', function () {
+  const zip = Platform.zipStore('progress.json', new TextEncoder().encode('{"a":1}'));
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  // EOCD is the last 22 bytes (no comment): sig 0x06054b50, counts 1/1
+  const eocd = zip.length - 22;
+  assert.strictEqual(dv.getUint32(eocd, true), 0x06054b50);
+  assert.strictEqual(dv.getUint16(eocd + 8, true), 1);
+  assert.strictEqual(dv.getUint16(eocd + 10, true), 1);
+  const cdOff = dv.getUint32(eocd + 16, true);
+  assert.strictEqual(dv.getUint32(cdOff, true), 0x02014b50);      // central header
+  assert.strictEqual(dv.getUint32(cdOff + 42, true), 0);          // local-header offset
+  assert.strictEqual(dv.getUint32(eocd + 12, true), zip.length - 22 - cdOff); // cd size
+  // local header agrees on name length and stored sizes
+  const nameLen = dv.getUint16(26, true);
+  assert.strictEqual(new TextDecoder().decode(zip.slice(30, 30 + nameLen)), 'progress.json');
+  const size = dv.getUint32(18, true);
+  assert.strictEqual(30 + nameLen + size, cdOff);
+});
+test('platform: base64 helpers round-trip', function () {
+  const bytes = new Uint8Array([0, 1, 2, 250, 255, 66]);
+  assert.deepStrictEqual(Array.from(Platform.base64ToBytes(Platform.bytesToBase64(bytes))), Array.from(bytes));
+});
+test('platform: jwt payload decodes sub and game_scope', function () {
+  const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const jwt = 'eyJhbGciOiJub25lIn0.' + b64url({ sub: 'user-1234-abcd', game_scope: 'meld-hall', exp: 123 }) + '.sig';
+  const payload = Platform.decodeJwtPayload(jwt);
+  assert.strictEqual(payload.sub, 'user-1234-abcd');
+  assert.strictEqual(payload.game_scope, 'meld-hall');
+  assert.strictEqual(Platform.decodeJwtPayload('not-a-jwt'), null);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

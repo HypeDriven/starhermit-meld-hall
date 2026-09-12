@@ -17,6 +17,7 @@
  * Run: npm run test:e2e
  */
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,8 +52,7 @@ function startServer() {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end('{"ok":true}');
       return;
-    }
-    let p = urlPath === '/' ? '/index.html' : urlPath;
+    }    let p = urlPath === '/' ? '/index.html' : urlPath;
     const file = path.normalize(path.join(ROOT, p));
     if (!file.startsWith(ROOT) || file.includes(`${path.sep}tests`) || file.includes(`${path.sep}tools`) || path.basename(file).startsWith('.')) {
       res.writeHead(403); res.end('forbidden'); return;
@@ -62,6 +62,18 @@ function startServer() {
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
       res.end(data);
     });
+  });
+  // the declared game server (server.js) answers /ws on-platform; answer the
+  // upgrade here too so the hosted-mode capability probe stays console-clean
+  server.on('upgrade', (req, socket) => {
+    if (req.url.split('?')[0] !== '/ws') return socket.destroy();
+    const key = req.headers['sec-websocket-key'];
+    if (!key) return socket.destroy();
+    const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+      'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+    socket.on('data', () => {}); // probe sockets open and close without protocol traffic
+    socket.on('error', () => {});
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
