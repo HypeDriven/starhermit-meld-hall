@@ -15,6 +15,8 @@
 })(typeof self !== 'undefined' ? self : globalThis, function (Rules) {
 
   const CARD_W = 0.7, CARD_H = 1.0, CARD_T = 0.02, GAP = 0.12;
+  const FELT_TOP = 0.02;                   // felt cylinder top (y = -0.24 + 0.52 / 2)
+  const CARD_Y = FELT_TOP + CARD_T / 2 + 0.004; // cards rest on the felt, never coplanar with it
   // authored framing constants (no magic offsets elsewhere)
   const FRAMING = {
     cameraPos: { x: 0, y: 7.2, z: 6.4 },
@@ -249,9 +251,9 @@
     const self = this;
     function addCard(cardId, x, z, zone, index, faceUp) {
       const mesh = new THREE.Mesh(self.cardGeo, faceUp === false ? self.backMats : self.faceMat(cardId));
-      mesh.position.set(x, CARD_T / 2, z);
+      mesh.position.set(x, CARD_Y, z);
       mesh.castShadow = self.tier.shadows;
-      mesh.userData = { zone: zone, index: index, cardId: cardId, baseY: CARD_T / 2 };
+      mesh.userData = { zone: zone, index: index, cardId: cardId, baseY: CARD_Y };
       self.scene.add(mesh);
       self.cardMeshes.push({ mesh: mesh, cardId: cardId, zone: zone, index: index });
       return mesh;
@@ -334,7 +336,7 @@
   /* ----- motion: authored springs, interruptible ----- */
   Scene.prototype.pulse = function (mesh, height) {
     if (this.reducedMotion || !mesh) return;
-    this.springs.push({ obj: mesh, baseY: mesh.userData.baseY || CARD_T / 2, t: 0, dur: 0.35, h: height || 0.15 });
+    this.springs.push({ obj: mesh, baseY: mesh.userData.baseY || CARD_Y, t: 0, dur: 0.35, h: height || 0.15 });
   };
 
   Scene.prototype.update = function (dt) {
@@ -373,6 +375,32 @@
     const s = this.tier.renderScale;
     this.renderer.setSize(Math.floor(w * s), Math.floor(h * s), false);
     this.camera.aspect = w / h;
+    // Frame the table rows inside the canvas band not covered by the HUD
+    // (top bar) and the DOM hand/tray (bottom), for any aspect ratio.
+    let top = 0, bottom = 0;
+    if (typeof document !== 'undefined') {
+      const cr = this.canvas.getBoundingClientRect();
+      const band = function (id) {
+        const el = document.getElementById(id);
+        if (!el || !el.offsetParent) return null;
+        const r = el.getBoundingClientRect();
+        return r.height ? { t: r.top - cr.top, b: r.bottom - cr.top } : null;
+      };
+      const hud = band('hud-top'); if (hud && hud.b < h * 0.4) top = hud.b;
+      for (const id of ['hand-dom', 'action-tray']) { const r = band(id); if (r && r.t > h * 0.5) bottom = Math.max(bottom, h - r.t); }
+    }
+    const safeH = Math.max(120, h - top - bottom);
+    this.camera.setViewOffset(w, safeH, 0, -top, w, h);
+    this.camera.aspect = w / safeH;
+    const tanV = Math.tan(FRAMING.fov * Math.PI / 360);
+    const halfW = 4.2, halfD = 3.6; // hand row to deck row, with margin
+    const base = Math.hypot(FRAMING.cameraPos.y - FRAMING.lookAt.y, FRAMING.cameraPos.z - FRAMING.lookAt.z);
+    const needW = halfW / (tanV * this.camera.aspect * 0.95);
+    const needD = halfD * 0.8 / (tanV * 0.95);
+    const k = Math.max(1, needW / base, needD / base);
+    this.camera.position.set(FRAMING.cameraPos.x, FRAMING.lookAt.y + (FRAMING.cameraPos.y - FRAMING.lookAt.y) * k,
+      FRAMING.lookAt.z + (FRAMING.cameraPos.z - FRAMING.lookAt.z) * k);
+    this.camera.lookAt(FRAMING.lookAt.x, FRAMING.lookAt.y, FRAMING.lookAt.z);
     this.camera.updateProjectionMatrix();
   };
 
@@ -383,10 +411,7 @@
     this.resize();
   };
 
-  Scene.prototype.resetCamera = function () {
-    this.camera.position.set(FRAMING.cameraPos.x, FRAMING.cameraPos.y, FRAMING.cameraPos.z);
-    this.camera.lookAt(FRAMING.lookAt.x, FRAMING.lookAt.y, FRAMING.lookAt.z);
-  };
+  Scene.prototype.resetCamera = function () { this.resize(); };
 
   Scene.prototype.dispose = function () {
     this.disposed = true;
