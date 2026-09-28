@@ -24,20 +24,24 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | All five screens plus two overlays as static markup; loads the nine scripts in dependency order |
+| `index.html` | All five screens plus two overlays as static markup; loads three.js, its r137 addons and the eleven game scripts in dependency order |
 | `src/rules.js` | Pure deterministic rules engine (`window.MeldRules` / CommonJS). No DOM, no timers |
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
 | `src/platform.js` | `MeldPlatform`: launch-token read/strip, Bearer auth + 45-min refresh, profile nickname, zip cloud-save mirror, read-only leaderboard, sync status |
 | `src/net.js` | `MeldNet`: hosted-table connector to the game's own `/ws` backend (host/join/commands/snapshots); silent capability probe |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
 | `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
-| `src/render.js` | `MeldRender`: the 3D hall, procedural card textures, picking, particles, quality tiers |
+| `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, GPU detection, `resolve()`, `presetTier()`, `describe()` |
+| `src/gfx-ui.js` | `MeldGfxUI`: the Settings overlay's Graphics section — builds and binds the controls, localized strings (9 locales), cost summary |
+| `src/render.js` | `MeldRender`: the 3D hall, procedural card/table textures, picking, particles, graphics settings, post-processing chain, adaptive resolution |
 | `src/ui.js` | `MeldUI`: screens, focus, keyboard, live regions, settings binding, the accessible hand list |
 | `src/main.js` | Bootstrap: capability detection, time sync, pointer taps, render loop, lifecycle, local funnel |
 | `src/style.css` | Layout, palette, contrast/large-text/colour-vision variants, safe-area padding |
-| `src/three.min.js`, `src/three.module.js` | Vendored Three.js r170 |
+| `src/three.min.js` | Vendored Three.js r137 (UMD build, `window.THREE`) — the renderer the game uses |
+| `src/vendor/three-r137/` | Same-revision addons from `three@0.137.0/examples/js`: EffectComposer, RenderPass, ShaderPass, MaskPass, UnrealBloomPass, SMAAPass, SSAOPass, their shaders, SimplexNoise, RoomEnvironment |
+| `src/three.module.js` | Three.js r170 ES module, vendored but not loaded |
 | `server.js` | Static server + time/health endpoints + authoritative hosted sessions over raw RFC6455 frames |
-| `tests/run.js` | 55 offline tests: rules, scoring, fuzzing, replay determinism, content validation, platform zip/JWT |
+| `tests/run.js` | 59 offline tests: rules, scoring, fuzzing, replay determinism, content validation, platform zip/JWT, graphics model and panel locales |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
 | `assets/` | Authored images: hall key art, results still, card-back art |
@@ -328,10 +332,45 @@ whole body to 120%.
 `scene.reducedMotion`) snaps positions instead of easing and suppresses idle drift; the CSS
 selection lift and the DOM layout remain, so nothing becomes ambiguous when motion is off.
 
-**Quality tiers** (`QUALITY_TIERS`): low = pixel ratio 1, no shadows, no particles, 0.8 render
-scale, lamps and panels dropped; medium = 1.5 / shadows / 500 particles / lamps; high = 2 /
-shadows / 2000 particles / lamps and wall panels. `auto` picks from `deviceMemory` and
-`hardwareConcurrency`.
+**Graphics.** The renderer uses ACES filmic tone mapping with sRGB output; theme colours and
+canvas textures are converted to linear so the felt, wood and card inks show their authored
+colours. A warm key directional light (the only shadow caster, PCF soft shadows with the shadow
+box fitted to the table top) is joined by a hemisphere fill and a faint ambient term. Optional
+effects: key-light shadows, SSAO contact darkening under cards and around the rim, bloom limited
+to lamp bulbs, the selection glow and meld sparks (threshold 0.88), a colour grade (gentle
+S-curve, warm highlights / cool shadows) with vignette, FXAA/SMAA/MSAA, image-based reflections
+from a PMREM-filtered `RoomEnvironment` (clearcoat on card faces and backs, a brass inlay ring,
+polished rim), and a detailed hall (procedural felt fibre, wood-grain rim, plank floor, wall
+panels, pendant lamps with glowing bulbs and a warm pool light, exponential fog, rounded card
+slabs, larger corner indices) versus a plain hall (flat materials, box cards). Particles are the
+meld burst (up to 32 or 64 sparks) plus, at High, dust motes drifting through the lamp light.
+Ambient motion — lamp shimmer, dust drift, a gentle bob on selected cards and a slow lamp glow over
+the title key art — stops under the Reduced motion setting or `prefers-reduced-motion`. At the
+detailed level the DOM layer picks up matching depth (paper-gradient hand buttons, soft panel and
+tray shadows, brass hairlines) without changing any colour the player reads; high contrast turns
+it off. The post chain is RenderPass (or SSAOPass) → UnrealBloom → grade/output (linear → sRGB)
+→ SMAA/FXAA, on half-float targets (multisampled for MSAA); it is built only when something needs
+it, so Low renders straight to the canvas, and if it cannot be built the table renders without it
+and the panel says so.
+
+The Settings overlay's **Graphics** section offers: Quality (`#set-quality`: Auto (detected:
+<tier>), Low, Balanced, High, Ultra) — Auto comes from the unmasked WebGL renderer string, where
+software renderers (SwiftShader, llvmpipe) get Low, discrete GPUs and Apple M-series get High,
+everything else Balanced, and phones/tablets are capped at Balanced; a render scale slider
+(`#gfx-scale`, 50–200% of the preset's); one select per category (`#gfx-cat-<name>`,
+`data-gfx-cat`) defaulting to "From preset (<tier>)" — shadows off/low/medium/high (512–2048²
+map), ambient occlusion off/on/high (16 or 32 SSAO samples), bloom, colour grade, anti-aliasing
+off/FXAA/SMAA/MSAA, reflections, table detail plain/detailed, particles off/low/high; Adaptive
+resolution (`#gfx-adaptive`, on by default: every 90 frames, an average above 26 ms steps the
+resolution down 10% to a floor of 60%, below 14 ms steps it back up 5%); Show frame rate
+(`#gfx-show-fps`, a bottom-left readout that never takes pointer input); and a summary line
+"GPU · cost summary · W×H px". Choosing a preset clears the overrides. Presets: Low = 80% scale,
+pixel ratio ≤ 1, context MSAA, no shadows/post, plain hall, sparks only (as cheap as the original
+game); Balanced = ratio ≤ 1.5, 512² shadows, bloom, grade, FXAA, reflections, detailed hall;
+High = ratio ≤ 2, 1024² shadows, SSAO, SMAA, dust motes; Ultra = 125% scale, 2048² shadows, full
+SSAO. Changes apply immediately and are stored in `settings.graphics` inside
+`meldhall.settings.v1` (an old `quality` value migrates to the matching preset); the resolved
+preset is mirrored on `body[data-gfx-preset]`, `body[data-gfx-detail]` and `#gl[data-gfx-preset]`.
 
 **Hero of the screen.** The felt between the meld row and the hand row — the melds are what the
 player reads, so the camera centres slightly behind them and the lamps pool light there.
@@ -398,7 +437,11 @@ Ships **en-US only**. All player-facing strings are English literals inside `ind
 (mode, stage, lesson, challenge and achievement titles). `<html lang="en">` is static and there is
 no locale selection, no string table and no `navigator.language` lookup.
 
-The required set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is therefore
+The one exception is the Settings overlay's Graphics section (`src/gfx-ui.js`), whose labels,
+options, note and cost summary ship in en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and
+it-IT, picked from `navigator.language` (regional fallback by language, else en-US).
+
+For the rest of the game the required set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is therefore
 not met; see "Design intent not yet implemented". The structural allowance is already in place:
 every string is built by concatenating short clauses in `ui.js` rather than being baked into
 canvas textures, and card faces use rank letters and suit glyphs that need no translation, so a
@@ -513,7 +556,7 @@ click and to wait for the AI, never to mutate state.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `tests/run.js`, 55 assertions, no dependencies:
+`npm test` → `tests/run.js`, 59 assertions, no dependencies:
 
 - meld validity, card values, sub-run enumeration, deal shape and per-seed determinism;
 - rejection paths (out of turn, malformed, double draw, discard before draw, bad meld shape,
@@ -526,12 +569,16 @@ click and to wait for the AI, never to mutate state.
   immutable within a UTC day, five unique themes, lowercase achievement keys, actionable lessons;
 - session: undo in practice, none in journey, stage/content agreement, lesson completion,
   idempotent achievements.
+- graphics: `detectPreset` on sample GPU strings (software → Low, discrete → High, mobile cap),
+  `resolve` with preset/override/scale clamp, choosing a preset clears overrides, Graphics panel
+  strings complete in all nine locales.
 
 `npm run test:e2e` → `tests/e2e.mjs` at 1280×800 and 390×844 (touch), failing on any console error
 or page error other than the known SwiftShader/GL noise: title loads → settings open/close → help
-open/back → Play → practice at target 30 → hand dealt into the accessible list → a full round played
+open/back → Graphics settings (Low then High applied, a shadows override reflected in the summary,
+both surviving a reload, Auto clearing the override and resolving to Low under SwiftShader) → Play → practice at target 30 → hand dealt into the accessible list → a full round played
 by clicking cards and tray buttons, exercising Hint and Undo → results → Next round → a second round
-including a keyboard-only turn → pause/resume plus settings mid-match → progress verified in
+including a keyboard-only turn → pause/resume plus settings mid-match (Ultra's full post chain rendered live, then Auto) → progress verified in
 localStorage → leave to title.
 
 **QA bar, as checkable statements.**

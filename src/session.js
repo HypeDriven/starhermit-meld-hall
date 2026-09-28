@@ -23,7 +23,8 @@
   const DEFAULT_SETTINGS = {
     music: 0.5, effects: 0.8, ambience: 0.4, voice: 0.0,
     muted: false, captions: true,
-    quality: 'auto',           // auto | low | medium | high
+    quality: 'auto',           // legacy tier (auto | low | medium | high), migrated into graphics
+    graphics: null,            // MeldGfx saved settings: { preset, render_scale, adaptive, show_fps, <category> }
     reducedMotion: false, highContrast: false, largeText: false,
     colorPalette: 'default',   // default | deuteranopia | protanopia | tritanopia
     leftHanded: false, holdToConfirm: false, timingAssist: false, haptics: true,

@@ -550,7 +550,7 @@
     wire('set-music', 'music'); wire('set-effects', 'effects');
     wire('set-ambience', 'ambience'); wire('set-voice', 'voice');
     wire('set-muted', 'muted', true); wire('set-captions', 'captions', true);
-    wire('set-quality', 'quality'); wire('set-motion', 'reducedMotion', true);
+    wire('set-motion', 'reducedMotion', true); // #set-quality is bound by gfx-ui.js
     wire('set-contrast', 'highContrast', true); wire('set-large-text', 'largeText', true);
     wire('set-lefty', 'leftHanded', true); wire('set-haptics', 'haptics', true);
     wire('set-palette', 'colorPalette');

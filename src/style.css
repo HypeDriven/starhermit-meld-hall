@@ -138,3 +138,41 @@ select, input[type=text] { font: inherit; padding: 8px; border-radius: 6px;
 
 .badge { display: inline-block; background: var(--panel2); border-radius: 20px; padding: 2px 12px; font-size: 0.85em; }
 .hidden { display: none !important; }
+
+/* ---------- Graphics settings section ---------- */
+#gfx-section { border-top: 1px solid #2e3c56; margin: 8px 0 14px; padding-top: 4px; }
+#gfx-section select { width: 100%; }
+.gfx-grid { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.gfx-scale label { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.gfx-scale output { font-variant-numeric: tabular-nums; color: var(--accent); }
+.gfx-toggles { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 8px; }
+.gfx-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
+#gfx-summary { font-size: 0.85em; overflow-wrap: anywhere; margin: 6px 0; }
+#gfx-post-note { font-size: 0.85em; color: var(--danger); margin: 6px 0; }
+#fps-meter { position: fixed; left: calc(6px + var(--sal)); bottom: calc(6px + var(--sab)); z-index: 60;
+  pointer-events: none; font: 12px/1.2 ui-monospace, monospace; color: #cfe3c8;
+  background: rgba(0,0,0,0.55); padding: 3px 6px; border-radius: 4px; }
+
+/* Detailed graphics: the DOM layer picks up the table's materials (paper cards,
+   brass hairlines, soft depth) without changing any colour the player reads. */
+body[data-gfx-detail="detailed"]:not(.high-contrast) .panel {
+  box-shadow: 0 18px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(232,179,75,0.18); }
+body[data-gfx-detail="detailed"]:not(.high-contrast) .card-btn {
+  background: linear-gradient(180deg, #fbf8f0 0%, #f2ecde 100%);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.8); }
+body[data-gfx-detail="detailed"]:not(.high-contrast) .card-btn.selected {
+  box-shadow: 0 0 0 3px var(--accent), 0 8px 16px rgba(0,0,0,0.4), 0 0 16px -2px var(--accent); }
+body[data-gfx-detail="detailed"]:not(.high-contrast) #hud-top,
+body[data-gfx-detail="detailed"]:not(.high-contrast) #action-tray {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35); border: 1px solid rgba(232,179,75,0.12); }
+
+/* Detailed graphics: a slow warm lamp glow breathes over the title key art
+   (static under reduced motion). */
+.panel { position: relative; z-index: 1; }
+body[data-gfx-detail="detailed"]:not(.high-contrast) #screen-title.active::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse 70% 45% at 50% 8%, rgba(255,196,120,0.16), transparent 70%);
+  animation: lamp-glow 7s ease-in-out infinite alternate; }
+@keyframes lamp-glow { from { opacity: 0.55; } to { opacity: 1; } }
+body.reduced-motion #screen-title.active::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { #screen-title.active::before { animation: none !important; } }

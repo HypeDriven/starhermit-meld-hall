@@ -421,5 +421,62 @@ test('platform: jwt payload decodes sub and game_scope', function () {
   assert.strictEqual(Platform.decodeJwtPayload('not-a-jwt'), null);
 });
 
+/* ---------- graphics quality model (src/gfx.js) ---------- */
+const Gfx = require('../src/gfx.js');
+const GfxUI = require('../src/gfx-ui.js');
+test('gfx: detectPreset maps GPU strings to tiers', function () {
+  assert.strictEqual(Gfx.detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)'), 'low');
+  assert.strictEqual(Gfx.detectPreset('llvmpipe (LLVM 15.0.7, 256 bits)'), 'low');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Direct3D11 vs_5_0 ps_5_0)'), 'high');
+  assert.strictEqual(Gfx.detectPreset('Apple M2'), 'high');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)'), 'balanced');
+  assert.strictEqual(Gfx.detectPreset('Adreno (TM) 640'), 'balanced');
+  assert.strictEqual(Gfx.detectPreset(''), 'balanced');
+  assert.strictEqual(Gfx.detectPreset('Apple M2', { mobile: true }), 'balanced'); // mobile caps Auto
+});
+test('gfx: resolve applies preset, overrides and clamps render scale', function () {
+  const auto = Gfx.resolve({}, 'low');
+  assert.strictEqual(auto.preset, 'low'); assert.strictEqual(auto.auto, true);
+  assert.strictEqual(auto.shadows, 'off'); assert.strictEqual(auto.post, false);
+  const hi = Gfx.resolve({ preset: 'high', shadows: 'off', bloom: 'bogus' }, 'low');
+  assert.strictEqual(hi.preset, 'high'); assert.strictEqual(hi.auto, false);
+  assert.strictEqual(hi.shadows, 'off');           // override wins
+  assert.strictEqual(hi.bloom, Gfx.presetTier('high', 'bloom')); // invalid override ignored
+  assert.strictEqual(hi.post, true);
+  assert.strictEqual(Gfx.resolve({ preset: 'high', render_scale: 9 }).scale, 2);
+  assert.strictEqual(Gfx.resolve({ preset: 'high', render_scale: 0.1 }).scale, 0.5);
+  assert.strictEqual(Gfx.resolve({ preset: 'bogus' }).preset, 'balanced');
+  assert.strictEqual(Gfx.resolve({ adaptive: false }).adaptive, false);
+  assert.strictEqual(Gfx.resolve({}).adaptive, true);
+  for (const p of Gfx.PRESETS) for (const c in Gfx.CATEGORIES)
+    assert.ok(Gfx.CATEGORIES[c].indexOf(Gfx.presetTier(p, c)) >= 0, p + '.' + c);
+});
+test('gfx: choosing a preset clears overrides but keeps scale and toggles', function () {
+  const next = Gfx.choosePreset({ preset: 'low', shadows: 'high', ao: 'on', render_scale: 1.5, show_fps: true }, 'ultra');
+  assert.deepStrictEqual(next, { preset: 'ultra', render_scale: 1.5, show_fps: true });
+  assert.strictEqual(Gfx.choosePreset({}, 'nonsense').preset, 'auto');
+  assert.strictEqual(Gfx.legacyPreset('medium'), 'balanced');
+  assert.strictEqual(Gfx.legacyPreset('auto'), 'auto');
+  assert.ok(/1024² shadows/.test(Gfx.describe(Gfx.resolve({ preset: 'high' }), [800, 600])));
+});
+test('gfx: Graphics panel strings exist for every required locale', function () {
+  const need = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
+  const keys = function (o, pre) {
+    return Object.keys(o).reduce(function (a, k) {
+      return a.concat(typeof o[k] === 'object' ? keys(o[k], pre + k + '.') : [pre + k]);
+    }, []);
+  };
+  const ref = keys(GfxUI.STRINGS['en-US'], '');
+  for (const l of need) {
+    assert.ok(GfxUI.STRINGS[l], 'missing ' + l);
+    assert.deepStrictEqual(keys(GfxUI.STRINGS[l], '').sort(), ref.slice().sort(), l);
+  }
+  assert.strictEqual(GfxUI.pickLocale('de-AT'), 'de-DE');
+  assert.strictEqual(GfxUI.pickLocale('es-MX'), 'es-419');
+  assert.strictEqual(GfxUI.pickLocale('fr-CA'), 'fr-CA');
+  assert.strictEqual(GfxUI.pickLocale('ja-JP'), 'en-US');
+  assert.notStrictEqual(GfxUI.STRINGS['de-DE'].cats.shadows, GfxUI.STRINGS['en-US'].cats.shadows);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

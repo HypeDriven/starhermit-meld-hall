@@ -69,14 +69,70 @@
     return Content.THEMES.filter(function (t) { return t.id === id; })[0] || Content.THEMES[0];
   }
 
-  /* quality tier pick */
-  function resolveQuality(setting) {
-    if (setting !== 'auto') return setting;
-    const mem = navigator.deviceMemory || 4;
-    const cores = navigator.hardwareConcurrency || 4;
-    if (mem <= 2 || cores <= 2) return 'low';
-    if (mem >= 8 && cores >= 8) return 'high';
-    return 'medium';
+  /* ---------- graphics: GPU probe, quality model, live apply ---------- */
+  const Gfx = window.MeldGfx;
+  const GfxUI = window.MeldGfxUI;
+  function probeGpu() {
+    try {
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl2') || c.getContext('webgl');
+      if (!gl) return '';
+      let name = String(gl.getParameter(gl.RENDERER) || '');
+      if (!name || /^webkit webgl$/i.test(name)) {
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        if (ext) name = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || name);
+      }
+      return name;
+    } catch (_) { return ''; }
+  }
+  function shortGpu(name) {
+    const m = /^ANGLE \((.*)\)$/.exec(name);
+    if (!m) return name;
+    const parts = m[1].split(', ');
+    let n = (parts[1] || parts[0]).replace(/\s*\(0x[0-9a-f]+\)/ig, '').replace(/\s+(Direct3D|vs_|ps_).*$/, '').trim();
+    const inner = /^(?:Vulkan|OpenGL|Metal)[^(]*\((.*)\)$/.exec(n);
+    if (inner) n = inner[1];
+    return n;
+  }
+  const gpuRaw = probeGpu();
+  const gpuName = shortGpu(gpuRaw);
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    ((navigator.maxTouchPoints || 0) > 0 && !!window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  const detected = Gfx.detectPreset(gpuRaw, { mobile: isMobile });
+  function gfxResolved() { return Gfx.resolve(UI.settings && UI.settings.graphics, detected); }
+  function gfxInfo() {
+    const r = gfxResolved();
+    let pixels;
+    if (scene3d && scene3d.size[0]) pixels = scene3d.pixels();
+    else {
+      const k = Math.min(window.devicePixelRatio || 1, r.maxRatio) * r.scale;
+      pixels = [Math.round(window.innerWidth * k), Math.round(window.innerHeight * k)];
+    }
+    return { gpu: gpuName, detected: detected, resolved: r, pixels: pixels,
+      postFailed: !!(scene3d && scene3d.postFailed), fps: scene3d ? Math.round(scene3d.fps) : 0 };
+  }
+  window.MeldGfxInfo = gfxInfo; // read by the Graphics panel (and e2e checks)
+  function fpsMeter(on) {
+    let el = document.getElementById('fps-meter');
+    if (on && !el) {
+      el = document.createElement('div');
+      el.id = 'fps-meter'; el.setAttribute('aria-hidden', 'true'); el.textContent = '— fps';
+      document.body.appendChild(el);
+    }
+    if (el) el.hidden = !on;
+  }
+  function applyGraphics() {
+    const r = gfxResolved();
+    document.body.dataset.gfxPreset = r.preset;
+    document.body.dataset.gfxDetail = r.detail;
+    document.getElementById('gl').dataset.gfxPreset = r.preset;
+    fpsMeter(r.showFps);
+    if (scene3d) scene3d.setGraphics(r);
+  }
+
+  function motionReduced() {
+    return !!(UI.settings && UI.settings.reducedMotion) ||
+      !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   /* ---------- render scene ---------- */
@@ -86,8 +142,9 @@
     if (scene3d || renderFailed) return scene3d;
     try {
       scene3d = new Render.Scene(document.getElementById('gl'), themeFor(UI.session), {
-        quality: resolveQuality(UI.settings.quality),
-        reducedMotion: UI.settings.reducedMotion,
+        graphics: gfxResolved(),
+        detected: detected,
+        reducedMotion: motionReduced(),
       });
     } catch (e) {
       renderFailed = true;
@@ -107,14 +164,12 @@
   };
   UI.onCameraReset = function () { if (scene3d) scene3d.resetCamera(); };
 
-  /* quality changes apply live */
+  /* reduced motion applies live (graphics changes arrive through the Graphics panel) */
   const origApply = UI.applySettings.bind(UI);
   UI.applySettings = function () {
     origApply();
-    if (scene3d) {
-      scene3d.setQuality(resolveQuality(UI.settings.quality));
-      scene3d.reducedMotion = !!UI.settings.reducedMotion;
-    }
+    document.body.classList.toggle('reduced-motion', !!UI.settings.reducedMotion);
+    if (scene3d) scene3d.reducedMotion = motionReduced();
   };
 
   /* the pause overlay halts the solo simulation while it is open */
@@ -185,7 +240,25 @@
   });
 
   /* ---------- boot: boot -> title -> profile-ready ---------- */
-  UI.bindSettings(Session.loadSettings(), function (key) { track('settings_change', key); });
+  const settings = Session.loadSettings();
+  if (!settings.graphics || typeof settings.graphics !== 'object') {
+    settings.graphics = { preset: Gfx.legacyPreset(settings.quality) }; // migrate the old quality tier
+  }
+  UI.bindSettings(settings, function (key) { track('settings_change', key); });
+  const gfxPanel = GfxUI.mount({
+    settings: settings,
+    locale: (navigator.languages && navigator.languages[0]) || navigator.language,
+    save: function () { Session.saveSettings(settings); },
+    onChange: function () { applyGraphics(); track('settings_change', 'graphics'); Audio.play('ui'); },
+    info: gfxInfo,
+  });
+  applyGraphics();
+  // keep the cost summary current while Settings is open (resolution, adaptive scale)
+  setInterval(function () {
+    if (gfxPanel && document.getElementById('overlay-settings').classList.contains('active')) gfxPanel.refreshSummary();
+  }, 1000);
+  document.getElementById('btn-settings').addEventListener('click', function () { if (gfxPanel) gfxPanel.refresh(); });
+  document.getElementById('btn-pause-settings').addEventListener('click', function () { if (gfxPanel) gfxPanel.refresh(); });
 
   /* StarHermit platform: launch token (fragment read once + stripped),
      identity, cloud-save mirror, sync status, hosted-table probe. */

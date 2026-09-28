@@ -180,7 +180,7 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !browserNoise.test(m.text())) errors.push(`console: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
   });
   const act = touch ? (sel) => page.tap(sel) : (sel) => page.click(sel);
   const step = async (name, fn) => { await fn(); console.log(`ok - [${tag}] ${name}`); };
@@ -200,6 +200,48 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
       await act('#btn-settings');
       await page.waitForSelector('#overlay-settings.active');
       await page.screenshot({ path: SHOT('settings', tag) });
+      await act('#btn-settings-close');
+      await page.waitForFunction(() => !document.getElementById('overlay-settings').classList.contains('active'));
+    });
+
+    await step('graphics settings: presets, override, persistence', async () => {
+      const preset = () => page.evaluate(() => document.body.dataset.gfxPreset);
+      await act('#btn-settings');
+      await page.waitForSelector('#overlay-settings.active');
+      await page.locator('#gfx-section').scrollIntoViewIfNeeded();
+      if (!(await page.locator('#set-quality').isVisible())) throw new Error('quality select not visible');
+      const autoLabel = await page.textContent('#set-quality option[value="auto"]');
+      if (!/Auto \(detected: Low\)/.test(autoLabel)) throw new Error(`auto label: ${autoLabel}`);
+      await page.selectOption('#set-quality', 'low');
+      if ((await preset()) !== 'low') throw new Error('low preset not applied');
+      await page.selectOption('#set-quality', 'high');
+      if ((await preset()) !== 'high') throw new Error('high preset not applied');
+      const canvasPreset = await page.getAttribute('#gl', 'data-gfx-preset');
+      if (canvasPreset !== 'high') throw new Error(`canvas preset ${canvasPreset}`);
+      await page.locator('#gfx-cat-shadows').scrollIntoViewIfNeeded();
+      await page.selectOption('#gfx-cat-shadows', 'off');
+      const sum = await page.textContent('#gfx-summary');
+      if (!/no shadows/.test(sum) || !/px/.test(sum)) throw new Error(`summary: ${sum}`);
+      await page.screenshot({ path: SHOT('graphics', tag) });
+      // the panel must fit: every control reachable inside the viewport width
+      const overflow = await page.evaluate(() => {
+        const vw = window.innerWidth;
+        return [...document.querySelectorAll('#gfx-section select, #gfx-section input')]
+          .filter((e) => { const r = e.getBoundingClientRect(); return r.left < 0 || r.right > vw + 1; }).map((e) => e.id);
+      });
+      if (overflow.length) throw new Error(`graphics controls cut off: ${overflow}`);
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('#screen-title.active');
+      if ((await preset()) !== 'high') throw new Error('preset did not survive reload');
+      await act('#btn-settings');
+      await page.waitForSelector('#overlay-settings.active');
+      if ((await page.inputValue('#gfx-cat-shadows')) !== 'off') throw new Error('override did not survive reload');
+      // back to Auto: choosing a preset clears the override (keeps the rest of the run on the fast tier)
+      await page.locator('#set-quality').scrollIntoViewIfNeeded();
+      await page.selectOption('#set-quality', 'auto');
+      if ((await page.inputValue('#gfx-cat-shadows')) !== 'preset') throw new Error('preset did not clear override');
+      if ((await preset()) !== 'low') throw new Error('auto did not resolve to low under SwiftShader');
+      await page.locator('#btn-settings-close').scrollIntoViewIfNeeded();
       await act('#btn-settings-close');
       await page.waitForFunction(() => !document.getElementById('overlay-settings').classList.contains('active'));
     });
@@ -290,6 +332,15 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
         await page.screenshot({ path: SHOT('pause', tag) });
         await act('#btn-pause-settings');
         await page.waitForSelector('#overlay-settings.active');
+        // the full post chain renders live behind the overlay, then back to Auto
+        await page.locator('#set-quality').scrollIntoViewIfNeeded();
+        await page.selectOption('#set-quality', 'ultra');
+        await page.waitForTimeout(1200);
+        if ((await page.getAttribute('#gl', 'data-gfx-preset')) !== 'ultra') throw new Error('ultra not applied in-game');
+        const failed = await page.evaluate(() => window.MeldGfxInfo().postFailed);
+        if (failed) throw new Error('post-processing chain failed to build');
+        await page.selectOption('#set-quality', 'auto');
+        await page.locator('#btn-settings-close').scrollIntoViewIfNeeded();
         await act('#btn-settings-close');
         await page.waitForFunction(() => !document.getElementById('overlay-settings').classList.contains('active'));
         await act('#btn-resume');
