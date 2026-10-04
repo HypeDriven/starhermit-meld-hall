@@ -381,46 +381,6 @@ test('progression: achievements are idempotent', function () {
   assert.deepStrictEqual(u2, []);
 });
 
-/* ---------- platform module (zip codec, jwt decode) ---------- */
-const Platform = require('../src/platform.js');
-test('platform: stored zip round-trips bytes', function () {
-  const data = new TextEncoder().encode(JSON.stringify({ career: { rounds: 3 }, hello: 'héllo' }));
-  const zip = Platform.zipStore('progress.json', data);
-  assert.strictEqual(zip[0], 0x50); assert.strictEqual(zip[1], 0x4b); // 'PK'
-  assert.strictEqual(Platform.unzipFirstEntry(zip).length, data.length);
-  assert.strictEqual(new TextDecoder().decode(Platform.unzipFirstEntry(zip)), new TextDecoder().decode(data));
-});
-test('platform: zip has exactly one well-formed central-directory entry', function () {
-  const zip = Platform.zipStore('progress.json', new TextEncoder().encode('{"a":1}'));
-  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-  // EOCD is the last 22 bytes (no comment): sig 0x06054b50, counts 1/1
-  const eocd = zip.length - 22;
-  assert.strictEqual(dv.getUint32(eocd, true), 0x06054b50);
-  assert.strictEqual(dv.getUint16(eocd + 8, true), 1);
-  assert.strictEqual(dv.getUint16(eocd + 10, true), 1);
-  const cdOff = dv.getUint32(eocd + 16, true);
-  assert.strictEqual(dv.getUint32(cdOff, true), 0x02014b50);      // central header
-  assert.strictEqual(dv.getUint32(cdOff + 42, true), 0);          // local-header offset
-  assert.strictEqual(dv.getUint32(eocd + 12, true), zip.length - 22 - cdOff); // cd size
-  // local header agrees on name length and stored sizes
-  const nameLen = dv.getUint16(26, true);
-  assert.strictEqual(new TextDecoder().decode(zip.slice(30, 30 + nameLen)), 'progress.json');
-  const size = dv.getUint32(18, true);
-  assert.strictEqual(30 + nameLen + size, cdOff);
-});
-test('platform: base64 helpers round-trip', function () {
-  const bytes = new Uint8Array([0, 1, 2, 250, 255, 66]);
-  assert.deepStrictEqual(Array.from(Platform.base64ToBytes(Platform.bytesToBase64(bytes))), Array.from(bytes));
-});
-test('platform: jwt payload decodes sub and game_scope', function () {
-  const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-  const jwt = 'eyJhbGciOiJub25lIn0.' + b64url({ sub: 'user-1234-abcd', game_scope: 'meld-hall', exp: 123 }) + '.sig';
-  const payload = Platform.decodeJwtPayload(jwt);
-  assert.strictEqual(payload.sub, 'user-1234-abcd');
-  assert.strictEqual(payload.game_scope, 'meld-hall');
-  assert.strictEqual(Platform.decodeJwtPayload('not-a-jwt'), null);
-});
-
 /* ---------- graphics quality model (src/gfx.js) ---------- */
 const Gfx = require('../src/gfx.js');
 const GfxUI = require('../src/gfx-ui.js');
@@ -478,5 +438,130 @@ test('gfx: Graphics panel strings exist for every required locale', function () 
   assert.notStrictEqual(GfxUI.STRINGS['de-DE'].cats.shadows, GfxUI.STRINGS['en-US'].cats.shadows);
 });
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed');
-process.exit(failed ? 1 : 0);
+/* ---------- StarHermit adapter (src/platform.js) over the real SDK ---------- */
+const fs = require('fs');
+const path = require('path');
+const SDK_SRC = fs.readFileSync(path.join(__dirname, '..', 'starhermit-sdk.js'), 'utf8');
+function loadSdk() {
+  const mod = { exports: {} };
+  new Function('module', 'exports', 'self', SDK_SRC)(mod, mod.exports, globalThis);
+  return mod.exports;
+}
+function freshPlatform() {
+  delete require.cache[require.resolve('../src/platform.js')];
+  return require('../src/platform.js');
+}
+const SH_USER = 'a1b2c3d4-0000-4000-8000-000000000001';
+function shFixture(href) {
+  const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const jwt = b64url({ alg: 'none' }) + '.' + b64url({ sub: SH_USER, game_scope: 'meld-hall', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.sig';
+  const u = new URL(href.replace('{jwt}', jwt));
+  const win = {
+    location: { href: u.href, hostname: u.hostname, pathname: u.pathname, search: u.search, hash: u.hash, origin: u.origin, assign() {} },
+    history: { state: null, replaceState(_s, _t, url) { win.replaced = url; } },
+  };
+  const calls = [];
+  let slot = null;
+  const kv = { music: 0.25 };
+  const res = (status, body, bytes) => ({
+    ok: status >= 200 && status < 300, status,
+    text: async () => (body == null ? '' : JSON.stringify(body)),
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const fetch = async (url, init) => {
+    init = init || {};
+    const method = init.method || 'GET';
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    calls.push({ url, method, body, auth: (init.headers || {}).Authorization });
+    if (url === '/api/v1/users/' + SH_USER + '/profile') return res(200, { nickname: 'Card Shark', username: 'hidden' });
+    if (url === '/api/v1/me/cloud-saves/game%3Ameld-hall') {
+      if (method === 'PUT') { slot = new Uint8Array(Buffer.from(body.dataBase64, 'base64')); return res(204); }
+      return slot ? res(200, null, slot) : res(404);
+    }
+    if (url === '/api/v1/games/meld-hall/settings') {
+      if (method === 'PATCH') Object.assign(kv, body.settings);
+      return res(200, { settings: kv });
+    }
+    if (url === '/api/v1/games/meld-hall/controls') return res(200, { actions: [{ action: 'meld', codes: ['KeyN'] }] });
+    return res(404);
+  };
+  const setTimeout = (fn, ms) => { const t = globalThis.setTimeout(fn, ms); t.unref(); return t; };
+  const sh = loadSdk().create({ window: win, fetch, setTimeout, clearTimeout });
+  // A Session-shaped stub with in-memory storage.
+  const store = { progress: null, settings: null };
+  const FakeSession = {
+    DEFAULT_PROGRESS: Session.DEFAULT_PROGRESS,
+    DEFAULT_SETTINGS: Session.DEFAULT_SETTINGS,
+    saveProgress(p) { store.progress = JSON.parse(JSON.stringify(p)); },
+    saveSettings(s) { store.settings = JSON.parse(JSON.stringify(s)); },
+  };
+  return { sh, win, calls, kv, store, FakeSession };
+}
+const tick = () => new Promise((r) => setImmediate(r));
+const asyncTests = [];
+function atest(name, fn) { asyncTests.push([name, fn]); }
+
+atest('platform: token read + stripped, nickname, cloud save at game:<slug>', async function () {
+  const f = shFixture('https://meld-hall.starhermit.com/#game_token={jwt}');
+  const P = freshPlatform();
+  assert.strictEqual(P.boot(f.FakeSession, f.sh), true);
+  assert.strictEqual(P.enabled(), true);
+  assert.strictEqual(P.gameKey(), 'meld-hall');
+  assert.ok(!String(f.win.replaced).includes('game_token'));
+  await tick(); await tick();
+  assert.strictEqual(P.displayName(), 'Card Shark');
+  assert.ok(f.calls.every((c) => /^Bearer /.test(c.auth)));
+  f.FakeSession.saveProgress({ journeyUnlocked: 9 });
+  await P.flushCloud();
+  const put = f.calls.find((c) => c.method === 'PUT');
+  assert.strictEqual(put.url, '/api/v1/me/cloud-saves/game%3Ameld-hall');
+  f.store.progress = null;
+  assert.strictEqual(await P.initCloud(f.FakeSession), true);
+  assert.strictEqual(f.store.progress.journeyUnlocked, 9);
+  assert.strictEqual(P.statusText(), 'synced to your account');
+});
+
+atest('platform: settings KV applies over local, patches changed keys, bindings, invite', async function () {
+  const f = shFixture('https://x.example/#game_token={jwt}');
+  const P = freshPlatform();
+  P.boot(f.FakeSession, f.sh);
+  const settings = Object.assign({}, Session.DEFAULT_SETTINGS);
+  assert.strictEqual(await P.loadSettings(f.FakeSession, settings), true);
+  assert.strictEqual(settings.music, 0.25);
+  settings.haptics = false;
+  f.FakeSession.saveSettings(settings);
+  await P.flushSettings();
+  const patch = f.calls.find((c) => c.method === 'PATCH');
+  assert.strictEqual(patch.url, '/api/v1/games/meld-hall/settings');
+  assert.deepStrictEqual(patch.body, { settings: { haptics: false } });
+  assert.deepStrictEqual(await P.loadBindings({ meld: ['KeyM'], hint: ['KeyH'] }), { meld: ['KeyN'], hint: ['KeyH'] });
+  assert.strictEqual(P.inviteLink(), 'https://dashboard.starhermit.com/game-invite/' + SH_USER + '/meld-hall');
+});
+
+atest('platform: standalone makes no fetch; sign-in only on the platform host', async function () {
+  const f = shFixture('http://localhost:8080/index.html');
+  const P = freshPlatform();
+  assert.strictEqual(P.boot(f.FakeSession, f.sh), false);
+  assert.strictEqual(await P.initCloud(f.FakeSession), false);
+  assert.strictEqual(await P.loadSettings(f.FakeSession, {}), false);
+  assert.strictEqual(await P.fetchLeaderboard(), null);
+  f.FakeSession.saveProgress({ a: 1 });
+  f.FakeSession.saveSettings({ music: 1 });
+  assert.strictEqual(P.canSignIn(), false);
+  assert.strictEqual(P.inviteLink(), null);
+  assert.strictEqual(f.calls.length, 0);
+  const g = shFixture('https://meld-hall.starhermit.com/');
+  const Q = freshPlatform();
+  Q.boot(g.FakeSession, g.sh);
+  assert.strictEqual(Q.canSignIn(), true);
+  assert.strictEqual(g.calls.length, 0);
+});
+
+(async function () {
+  for (const [name, fn] of asyncTests) {
+    try { await fn(); ++passed; console.log('  ok  ' + name); }
+    catch (e) { ++failed; console.error('FAIL  ' + name + '\n      ' + (e && e.stack || e)); }
+  }
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed ? 1 : 0);
+})();

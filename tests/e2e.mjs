@@ -12,12 +12,13 @@
  * through real clicks/key presses on the UI a player sees.
  *
  * Runs twice: desktop 1280x800 and mobile 390x844 (touch). Fails loudly on
- * any non-benign console error or pageerror.
+ * any non-benign console error or pageerror, and on any same-origin /api or
+ * /ws request (a standalone load must make none; the static server has no
+ * such routes).
  *
  * Run: npm run test:e2e
  */
 import http from 'node:http';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,17 +43,7 @@ const MIME = {
 function startServer() {
   const server = http.createServer((req, res) => {
     const urlPath = decodeURIComponent(req.url.split('?')[0]);
-    // platform time endpoint, so the title screen's fetch stays quiet offline
-    if (urlPath === '/api/v1/time') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ now: Date.now() }));
-      return;
-    }
-    if (urlPath === '/api/v1/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end('{"ok":true}');
-      return;
-    }    let p = urlPath === '/' ? '/index.html' : urlPath;
+    let p = urlPath === '/' ? '/index.html' : urlPath;
     const file = path.normalize(path.join(ROOT, p));
     if (!file.startsWith(ROOT) || file.includes(`${path.sep}tests`) || file.includes(`${path.sep}tools`) || path.basename(file).startsWith('.')) {
       res.writeHead(403); res.end('forbidden'); return;
@@ -62,18 +53,6 @@ function startServer() {
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
       res.end(data);
     });
-  });
-  // the declared game server (server.js) answers /ws on-platform; answer the
-  // upgrade here too so the hosted-mode capability probe stays console-clean
-  server.on('upgrade', (req, socket) => {
-    if (req.url.split('?')[0] !== '/ws') return socket.destroy();
-    const key = req.headers['sec-websocket-key'];
-    if (!key) return socket.destroy();
-    const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
-    socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
-      'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n');
-    socket.on('data', () => {}); // probe sockets open and close without protocol traffic
-    socket.on('error', () => {});
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
@@ -179,6 +158,11 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (/^(127\.0\.0\.1|localhost)$/.test(u.hostname) && /^\/(api|ws)(\/|$)/.test(u.pathname)) errors.push(`own-server request: ${r.method()} ${u.pathname}`);
+  });
+  page.on('websocket', (ws) => errors.push(`websocket opened: ${ws.url()}`));
   page.on('console', (m) => {
     if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
   });

@@ -13,12 +13,12 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 
 | | |
 |---|---|
-| Genre | Turn-based rummy-family card game, single-player vs. AI (server supports hosted 2-player) |
+| Genre | Turn-based rummy-family card game, single-player vs. AI |
 | Players | 2–4 seats; the human always holds seat 0, the rest are AI in local play |
 | Session | One round 2–4 min; a match to the target score 5–15 min |
 | Platforms | Desktop and mobile browsers, portrait and landscape |
 | Rendering | Three.js card table on `<canvas id="gl">`, with a complete semantic DOM mirror layered above it — the DOM is playable on its own when WebGL is unavailable |
-| Networking | Optional `server.js`: static host, `/api/v1/time`, and an authoritative WebSocket at `/ws`; StarHermit platform glue (launch token, identity, cloud save) in `src/platform.js` |
+| Networking | None standalone (zero own-server requests). StarHermit platform glue (over `starhermit-sdk.js`) in `src/platform.js`; `server.js` is a local static host |
 
 ### File map
 
@@ -27,8 +27,9 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `index.html` | All five screens plus two overlays as static markup; loads three.js, its r137 addons and the eleven game scripts in dependency order |
 | `src/rules.js` | Pure deterministic rules engine (`window.MeldRules` / CommonJS). No DOM, no timers |
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
-| `src/platform.js` | `MeldPlatform`: launch-token read/strip, Bearer auth + 45-min refresh, profile nickname, zip cloud-save mirror, read-only leaderboard, sync status |
-| `src/net.js` | `MeldNet`: hosted-table connector to the game's own `/ws` backend (host/join/commands/snapshots); silent capability probe |
+| `starhermit-sdk.js` | Shared StarHermit client (unmodified copy) |
+| `src/platform.js` | `MeldPlatform` over the SDK: identity, sign-in/invite, cloud-save mirror, settings KV, key bindings, read-only leaderboard, sync status |
+| `src/sh-strings.js` | Account strings (sign-in, invite, toasts) in the nine locales |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
 | `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
 | `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, GPU detection, `resolve()`, `presetTier()`, `describe()` |
@@ -40,8 +41,8 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/three.min.js` | Vendored Three.js r137 (UMD build, `window.THREE`) — the renderer the game uses |
 | `src/vendor/three-r137/` | Same-revision addons from `three@0.137.0/examples/js`: EffectComposer, RenderPass, ShaderPass, MaskPass, UnrealBloomPass, SMAAPass, SSAOPass, their shaders, SimplexNoise, RoomEnvironment |
 | `src/three.module.js` | Three.js r170 ES module, vendored but not loaded |
-| `server.js` | Static server + time/health endpoints + authoritative hosted sessions over raw RFC6455 frames |
-| `tests/run.js` | 59 offline tests: rules, scoring, fuzzing, replay determinism, content validation, platform zip/JWT, graphics model and panel locales |
+| `server.js` | Local static server; its legacy time/health endpoints and `/ws` hosted sessions are no longer called by the client |
+| `tests/run.js` | 58 offline tests: rules, scoring, fuzzing, replay determinism, content validation, the StarHermit adapter over the real SDK with a stubbed fetch, graphics model and panel locales |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
 | `assets/` | Authored images: hall key art, results still, card-back art |
@@ -483,47 +484,52 @@ tray wraps, so a 30–40% expansion in German or French costs height, never clip
 - *Server script.* `server.js` is the declared platform server: it hosts the static bundle
   (refusing dotfiles and `node_modules`, with a normalized-path traversal guard) and exposes
   `GET /api/v1/health` → `{ok, rules}`.
-- *Platform time.* `GET /api/v1/time` → `{now}`; the client round-trip-corrects it into
-  `UI.serverOffset` and derives the daily challenge day from it, so the daily rolls on host time
-  rather than a device clock. A failed fetch silently falls back to the local clock.
-- *Launch token + identity.* `src/platform.js` reads `#game_token=<jwt>` once (query
-  `?token=`/`?launch=` fallback for local dev), strips it via `history.replaceState`, decodes
-  `sub`/`game_scope`, sends `Authorization: Bearer` on every call, and re-mints the token every
-  45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry). The profile line reads
-  "Playing as \<nickname\>" from `GET /api/v1/users/{sub}/profile` (`"Player " + id.slice(0,8)`
-  fallback; never `/api/v1/me`, never usernames) plus a sync status (syncing/saving/synced/offline).
-- *Cloud save.* Progress mirrors to the single platform slot
-  `GET/PUT /api/v1/me/cloud-saves/meld-hall` as a stored zip (`progress.json`) + base64. Load is
-  remote-preferred (404 = keep local); saves debounce 2 s and flush on `pagehide`/tab hide.
+- *Standalone.* Without a launch token the client makes no own-server request (no time probe,
+  no `/ws` hosted tables, no health check); the daily day comes from the local clock.
+- *Platform time.* Signed in only, `GET /api/v1/time` (via `StarHermit.api`) → `{now}` is
+  round-trip-corrected into `UI.serverOffset` for the daily day.
+- *Shared SDK.* All platform calls go through `starhermit-sdk.js` (loaded first) via
+  `src/platform.js`; without a launch token nothing calls the platform.
+- *Launch token + renewal.* `StarHermit.init()` reads `#game_token=` (library launch) or
+  `#access_token=` (sign-in return) once, strips it and renews it before expiry. If renewal is
+  refused the game toasts "signed out", hides the invite button and keeps playing locally.
+- *Sign-in.* On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**;
+  hidden when signed in and when running locally.
+- *Identity.* The profile line reads "Playing as \<nickname\>" (profile `nickname`, fallback
+  `Player <id prefix>`; never `/api/v1/me`, never usernames) plus a sync status
+  (syncing/saving/synced/offline).
+- *Cloud save.* Progress mirrors to the `game:<slug>` cloud-save slot. Load is remote-preferred
+  (absent = keep local); saves debounce 2 s and flush with keepalive on `pagehide`/tab hide.
   `meldhall.save.v1` localStorage remains the offline cache.
-- *Daily board (read-only).* Daily results fetch `GET /api/v1/games/{slug}` → `leaderboardId`,
-  then `GET /api/v1/leaderboards/{id}/entries`, resolving userIds to nicknames. Clients never
-  submit scores; personal bests stay in the save doc.
-- *Authoritative hosted sessions.* `WS /ws` runs the same rules engine server-side: `create`,
-  `join`, `sync`, `command`. The server binds the seat from the socket (a client-supplied
-  `player` field is overwritten), dedupes by command id, rejects payloads over 4 KB, rejects
-  fragmented frames, answers pings, broadcasts a snapshot with its state hash after every accepted
-  command, and emits a `result` frame on round or match end. Dead sessions are swept after 6 hours.
-  Clients connect with `?access_token=` when signed in; a table created with a token requires
-  joiners to present one (`auth_required`). `src/net.js` + the Hosted mode in `ui.js` expose it:
-  host a table (share the 8-character code) or join by code; a silent WS probe gates the entry.
+- *Settings KV.* Every preference except key bindings (volumes, mute, captions, motion, contrast,
+  text size, palette, left-handed, haptics, graphics, tutorial flags …) is patched to the
+  per-player settings store on change (changed keys only); at boot stored values override local ones.
+- *Controls.* `starhermit.txt` lists one `control.<action>=<Code> | <Label>` line per keyboard
+  action; keyboard input is routed by `event.code` through `StarHermit.loadBindings()` and the
+  Help controls list shows the effective keys.
+- *Invite link.* Signed-in players get **Invite a friend** on the title, copying
+  `StarHermit.inviteLink()` with a confirmation toast.
+- *Daily board (read-only).* Daily results show the game's first platform board when one exists
+  (`StarHermit.leaderboard()`, names via profiles). Clients never submit scores; personal bests
+  stay in the save doc.
 
 **Not used**
 
-Presence, telemetry/activity and server-side achievement sync — achievements and career stats
+Platform sessions/matchmaking/chat/replays (`server.js` is a standalone Node host, not a
+platform game script), presence, telemetry/activity and server-side achievement sync — achievements and career stats
 stay local (inside the cloud-saved progress doc), and the local funnel is never transmitted.
 Score submission to leaderboards does not exist (read-only board, above). Realtime-rooms
-matchmaking/friends invites are not used: hosted tables use the game's own authoritative `/ws`
-backend (declared `server=server.js`) rather than platform-routed rooms.
+matchmaking/friends invites are not used. The legacy hosted-table `/ws` backend in `server.js`
+is no longer reachable from the client (it only ever worked against the dev server), so the
+Hosted mode was removed.
 
 ---
 
 ## 13. Technical architecture
 
-**Module graph.** `rules.js` and `content.js` depend on nothing; `platform.js` and `net.js`
-depend only on `rules`/`platform` (and browser globals, all guarded, so both load in Node for
-tests); `session.js` depends on rules+content; `audio.js` and `render.js` are leaves; `ui.js`
-composes rules/content/session/audio/platform/net; `main.js` wires ui ↔ render and owns the
+**Module graph.** `rules.js` and `content.js` depend on nothing; `platform.js`
+depends only on browser globals (all guarded, so it loads in Node for tests); `session.js` depends on rules+content; `audio.js` and `render.js` are leaves; `ui.js`
+composes rules/content/session/audio/platform; `main.js` wires ui ↔ render and owns the
 browser lifecycle. Every module is a UMD factory, so `tests/run.js` requires the engine in plain
 Node with no build step and no dependencies.
 
@@ -556,7 +562,7 @@ click and to wait for the AI, never to mutate state.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `tests/run.js`, 59 assertions, no dependencies:
+`npm test` → `tests/run.js`, 58 assertions, no dependencies:
 
 - meld validity, card values, sub-run enumeration, deal shape and per-seed determinism;
 - rejection paths (out of turn, malformed, double draw, discard before draw, bad meld shape,
@@ -627,10 +633,6 @@ weight without changing the silhouette.
 
 ## 16. Known limitations
 
-- **Hosted tables are 2-player, this backend only.** The Hosted mode appears only when the
-  game's own `/ws` server answers (a silent probe); it does not use platform realtime rooms, has
-  no rematch flow (the table closes at match end), and the results *Replay* button is inert for
-  hosted tables (the server does not send a replay envelope).
 - **English only.** No string table, no locale switch (section 10).
 - **Challenge constraints are advisory.** `ch_speed`'s 25-turn limit and `ch_frugal`'s 5-deadwood
   cap are stated in the objective text but not enforced or verified by the rules engine; only
@@ -653,9 +655,8 @@ weight without changing the silhouette.
    `data/` and a `t(key)` lookup replacing the literals in `ui.js`, `content.js` and `index.html`.
 3. **Enforced challenge goals.** Turn and deadwood constraints evaluated in the session driver so a
    challenge can be failed, with the failure reason shown on the results screen.
-4. **Hosted-table polish and score submission.** Reconnect through the existing `sync` op, a
-   rematch flow, and platform-routed realtime rooms (matchmaking/friend invites) instead of the
-   game's own `/ws` backend. Ranked daily submission to the shared board (the board is read-only
+4. **Online tables and score submission.** Two-player tables over platform-routed realtime rooms
+   (matchmaking/friend invites). Ranked daily submission to the shared board (the board is read-only
    today because clients cannot post scores).
 
 ## Browser interference

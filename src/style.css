@@ -176,3 +176,9 @@ body[data-gfx-detail="detailed"]:not(.high-contrast) #screen-title.active::befor
 @keyframes lamp-glow { from { opacity: 0.55; } to { opacity: 1; } }
 body.reduced-motion #screen-title.active::before { animation: none; }
 @media (prefers-reduced-motion: reduce) { #screen-title.active::before { animation: none !important; } }
+
+/* StarHermit confirmation toast */
+#sh-toast { position: fixed; bottom: calc(24px + var(--sab)); left: 50%; transform: translateX(-50%);
+  max-width: min(92vw, 420px); background: rgba(0,0,0,0.85); border: 1px solid var(--accent);
+  padding: 8px 16px; border-radius: 8px; z-index: 60; text-align: center; }
+#sh-toast[hidden] { display: none; }

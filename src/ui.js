@@ -6,10 +6,10 @@
  */
 (function (root, factory) {
   const api = factory(root.MeldRules, root.MeldContent, root.MeldSession, root.MeldAudio,
-    root.MeldPlatform || null, root.MeldNet || null);
+    root.MeldPlatform || null);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.MeldUI = api;
-})(typeof self !== 'undefined' ? self : globalThis, function (Rules, Content, Session, Audio, Platform, Net) {
+})(typeof self !== 'undefined' ? self : globalThis, function (Rules, Content, Session, Audio, Platform) {
 
   function $(id) { return document.getElementById(id); }
 
@@ -30,9 +30,6 @@
     this.serverOffset = 0;        // platform time offset (ms)
     this.onRenderRequest = null;  // set by main.js
     this.helpReturn = 'title';
-    this.hostedAvailable = false; // set async by main.js after the /ws probe
-    this.pendingHosted = null;    // HostedSession waiting in the lobby
-    this.pendingHostedReady = false;
     this._bind();
   }
 
@@ -85,10 +82,6 @@
     { id: 'challenge', name: 'Challenge', desc: 'Constrained goals: turn limits, deadwood targets, crowded tables.', ranked: false, minutes: '5–10 min' },
     { id: 'learn', name: 'Learn', desc: 'Interactive lessons. One rule at a time; you perform each action.', ranked: false, minutes: '2 min' },
   ];
-  const HOSTED_MODE = {
-    id: 'hosted', name: 'Hosted', ranked: false, minutes: '10–20 min',
-    desc: 'Two-player table on the Meld Hall server. Host a table and share the code, or join one.',
-  };
 
   UI.prototype.showModeSelect = function (preselect) {
     const list = $('mode-list');
@@ -102,16 +95,12 @@
         chSel.appendChild(o);
       }
     }
-    this.resetHostedPanel();
     const self = this;
     function showOptions(id) {
       $('mode-options').classList.toggle('hidden', id !== 'practice');
       $('mode-challenge-options').classList.toggle('hidden', id !== 'challenge');
-      $('mode-hosted-options').classList.toggle('hidden', id !== 'hosted');
-      $('hosted-status').classList.toggle('hidden', id !== 'hosted');
     }
     const modes = MODES.slice();
-    if (this.hostedAvailable && Net) modes.push(HOSTED_MODE);
     for (const m of modes) {
       const b = document.createElement('button');
       b.textContent = m.name;
@@ -126,76 +115,9 @@
       list.appendChild(b);
     }
     this.pendingMode = preselect || 'practice';
-    if (this.pendingMode === 'hosted' && modes.indexOf(HOSTED_MODE) < 0) this.pendingMode = 'practice';
     $('mode-detail').textContent = modes.filter(function (m) { return m.id === self.pendingMode; })[0].desc;
     showOptions(this.pendingMode);
     this.show('mode');
-  };
-
-  /* ---------- hosted table lobby ---------- */
-  UI.prototype.resetHostedPanel = function () {
-    if (this.pendingHosted) { this.pendingHosted.close(); this.pendingHosted = null; }
-    this.pendingHostedReady = false;
-    const host = $('btn-host-table'), join = $('btn-join-table'), code = $('opt-join-code');
-    if (host) { host.disabled = false; join.disabled = false; code.disabled = false; }
-    const st = $('hosted-status');
-    if (st) { st.textContent = ''; st.classList.add('hidden'); }
-  };
-  UI.prototype.setHostedStatus = function (text) {
-    const st = $('hosted-status');
-    st.textContent = text;
-    st.classList.toggle('hidden', !text);
-  };
-  UI.prototype.onHostedLobbyEvent = function (evt) {
-    if (evt.type === 'peerJoined' && this.pendingHosted) {
-      this.pendingHostedReady = true;
-      this.setHostedStatus('Opponent seated at table ' + this.pendingHosted.sessionId +
-        ' — press Start when ready.');
-      Audio.play('ui');
-    } else if (evt.type === 'connectionLost' && this.pendingHosted) {
-      this.pendingHostedReady = false;
-      this.setHostedStatus('Connection to the table was lost. Host or join again.');
-    }
-  };
-  UI.prototype.hostTable = function () {
-    const self = this;
-    if (!Net) return;
-    this.setHostedStatus('Opening a table…');
-    Net.host().then(function (hs) {
-      self.pendingHosted = hs;
-      hs.on(function (evt) { self.onHostedLobbyEvent(evt); });
-      self.setHostedStatus('Table code: ' + hs.sessionId + ' — waiting for your opponent…');
-      $('btn-host-table').disabled = true;
-      $('btn-join-table').disabled = true;
-      $('opt-join-code').disabled = true;
-    }).catch(function (err) {
-      self.setHostedStatus('Could not open a table (' + (err && err.message || 'error') + ').');
-    });
-  };
-  UI.prototype.joinTable = function () {
-    const self = this;
-    if (!Net) return;
-    const code = $('opt-join-code').value.trim().toLowerCase();
-    if (!/^[0-9a-f]{1,8}$/.test(code)) {
-      this.setHostedStatus('Enter the 8-character table code the host shares.');
-      return;
-    }
-    this.setHostedStatus('Joining table ' + code + '…');
-    Net.join(code).then(function (hs) {
-      self.pendingHosted = hs;
-      hs.on(function (evt) { self.onHostedLobbyEvent(evt); });
-      self.pendingHostedReady = true;
-      $('btn-host-table').disabled = true;
-      $('btn-join-table').disabled = true;
-      $('opt-join-code').disabled = true;
-      self.setHostedStatus('Seated at table ' + hs.sessionId + ' — press Start.');
-    }).catch(function (err) {
-      const reason = err && err.message;
-      self.setHostedStatus(reason === 'no_such_session' ? 'No table with that code.'
-        : reason === 'session_full' ? 'That table already has two players.'
-        : reason === 'auth_required' ? 'That table requires a signed-in player.'
-        : 'Could not join (' + (reason || 'error') + ').');
-    });
   };
 
   UI.prototype.startPendingMode = function () {
@@ -218,15 +140,6 @@
       let idx = Content.LESSONS.findIndex(function (l) { return !seen[l.id]; });
       if (idx < 0) idx = 0;
       this.attachSession(Session.startLearn(idx));
-    } else if (m === 'hosted') {
-      if (this.pendingHosted && this.pendingHostedReady) {
-        const hs = this.pendingHosted;
-        this.pendingHosted = null;
-        this.pendingHostedReady = false;
-        this.attachSession(hs);
-      } else {
-        this.setHostedStatus('Host a table or join one with a code first.');
-      }
     }
   };
 
@@ -250,15 +163,11 @@
     const st = s.state;
     if (s.mode === 'learn' && s.contentRef) return s.contentRef.title + ' — ' + s.contentRef.text;
     if (s.mode === 'challenge' && s.contentRef) return s.contentRef.title + ': ' + s.contentRef.text;
-    if (s.mode === 'hosted') return 'Hosted table ' + (s.sessionId || '') + ' — first to ' +
-      st.targetScore + ' points wins the match. Go out with an empty hand to win the round.';
     return 'Round ' + st.round + ' — first to ' + st.targetScore + ' points wins the match. Go out with an empty hand to win the round.';
   };
 
-  // Display name for a seat: hosted tables use the seated players' names.
   UI.prototype.nameFor = function (p) {
     const s = this.session;
-    if (s && s.playerName) return s.playerName(p);
     return p === (s ? s.humanSeat : 0) ? 'You' : 'Opponent ' + (p + 1);
   };
 
@@ -267,23 +176,6 @@
     if (evt.type === 'invalid') {
       Audio.play('invalid');
       this.announceError('Action rejected: ' + this.reasonText(evt.reason));
-      return;
-    }
-    if (evt.type === 'peerLeft' || evt.type === 'connectionLost') {
-      Audio.play('ui');
-      if (s && !s.isOver()) {
-        this.announceError(evt.type === 'peerLeft'
-          ? 'Your opponent left the table.'
-          : 'The connection to the table was lost.');
-        if (s.close) s.close();
-        this.session = null;
-        this.show('title');
-        this.refreshTitle();
-      } else {
-        this.announceError(evt.type === 'peerLeft'
-          ? 'Your opponent left the table.'
-          : 'The connection to the table was lost.');
-      }
       return;
     }
     if (evt.type === 'lessonComplete') {
@@ -522,19 +414,57 @@
       '<div class="panel"><h3>Lay off</h3><p>Extend any table meld with a matching card from your hand.</p></div>' +
       '<div class="panel"><h3>Discard &amp; deadwood</h3><p>End your turn with one discard. When a player empties their hand, everyone else\u2019s remaining cards (deadwood) become the winner\u2019s points.</p></div>' +
       '</div>';
-    const b = this.settings.bindings;
+    const k = this.keyText.bind(this);
     $('help-controls').innerHTML = '<ul>' +
-      '<li>Move between cards: ' + b.left.replace('Arrow', '') + '/' + b.right.replace('Arrow', '') + ' arrow keys</li>' +
-      '<li>Select card: ' + b.confirm + ' · Draw deck: D · Take discard: F</li>' +
-      '<li>Meld selection: M · Lay off: L · Discard: X</li>' +
-      '<li>Undo (practice): U · Hint: H · Pause: P · Camera reset: C · Cancel: Esc</li>' +
+      '<li>Move between cards: ' + k('left') + ' ' + k('right') + '</li>' +
+      '<li>Select card: ' + k('confirm') + ' · Draw deck: ' + k('drawDeck') + ' · Take discard: ' + k('drawDiscard') + '</li>' +
+      '<li>Meld selection: ' + k('meld') + ' · Lay off: ' + k('layoff') + ' · Discard: ' + k('discard') + '</li>' +
+      '<li>Undo (practice): ' + k('undo') + ' · Hint: ' + k('hint') + ' · Pause: ' + k('pause') + ' · Camera reset: ' + k('cameraReset') + ' · Cancel: ' + k('cancel') + '</li>' +
       '<li>Pointer/touch: tap cards to select, tap deck or discard pile to draw, tap a meld marker to lay off.</li></ul>';
     this.show('help');
   };
 
   /* ---------- settings ---------- */
+  const SETTING_FIELDS = [
+    ['set-music', 'music'], ['set-effects', 'effects'], ['set-ambience', 'ambience'], ['set-voice', 'voice'],
+    ['set-muted', 'muted', true], ['set-captions', 'captions', true], ['set-motion', 'reducedMotion', true],
+    ['set-contrast', 'highContrast', true], ['set-large-text', 'largeText', true],
+    ['set-lefty', 'leftHanded', true], ['set-haptics', 'haptics', true], ['set-palette', 'colorPalette'],
+  ];
+  // Re-read the settings form from this.settings (after the platform settings load).
+  UI.prototype.bindSettingsValues = function () {
+    const s = this.settings;
+    for (const f of SETTING_FIELDS) {
+      const el = $(f[0]);
+      if (f[2]) el.checked = !!s[f[1]]; else el.value = s[f[1]];
+    }
+  };
+
+  /* ---------- key bindings ({action: codes[]}, routed by event.code) ---------- */
+  // Defaults: the per-device settings.bindings (matching the control.* lines in
+  // starhermit.txt); signed-in players get their StarHermit bindings instead.
+  UI.prototype.defaultKeys = function () {
+    const b = this.settings.bindings;
+    const keys = {};
+    for (const a of ['left', 'right', 'confirm', 'cancel', 'pause', 'drawDeck', 'drawDiscard', 'meld', 'layoff', 'discard', 'undo', 'hint', 'cameraReset']) {
+      keys[a] = [b[a]];
+    }
+    if (keys.confirm.indexOf('Space') < 0) keys.confirm.push('Space');
+    return keys;
+  };
+  UI.prototype.setKeys = function (keys) { this.keys = keys; };
+  function keyLabel(code) {
+    const named = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Escape: 'Esc' };
+    if (named[code]) return named[code];
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+    if (/^Digit\d$/.test(code)) return code.slice(5);
+    return code || '—';
+  }
+  UI.prototype.keyText = function (action) { return (this.keys[action] || []).map(keyLabel).join('/'); };
+
   UI.prototype.bindSettings = function (settings, onChange) {
     this.settings = settings;
+    this.keys = this.defaultKeys();
     const self = this;
     function wire(id, key, isCheck) {
       const el = $(id);
@@ -547,13 +477,7 @@
         Audio.play('ui');
       });
     }
-    wire('set-music', 'music'); wire('set-effects', 'effects');
-    wire('set-ambience', 'ambience'); wire('set-voice', 'voice');
-    wire('set-muted', 'muted', true); wire('set-captions', 'captions', true);
-    wire('set-motion', 'reducedMotion', true); // #set-quality is bound by gfx-ui.js
-    wire('set-contrast', 'highContrast', true); wire('set-large-text', 'largeText', true);
-    wire('set-lefty', 'leftHanded', true); wire('set-haptics', 'haptics', true);
-    wire('set-palette', 'colorPalette');
+    for (const f of SETTING_FIELDS) wire(f[0], f[1], f[2]); // #set-quality is bound by gfx-ui.js
     this.applySettings();
   };
 
@@ -568,35 +492,35 @@
 
   /* ---------- keyboard ---------- */
   UI.prototype.onKey = function (e) {
+    const keys = this.keys;
+    const is = function (action) { return (keys[action] || []).indexOf(e.code) >= 0; };
     if (this.currentScreen !== 'play' || !this.session) {
-      if (e.code === 'Escape') { this.overlay('overlay-pause', false); this.overlay('overlay-settings', false); }
+      if (is('cancel')) { this.overlay('overlay-pause', false); this.overlay('overlay-settings', false); }
       return;
     }
-    const b = this.settings.bindings;
     const s = this.session;
     const hand = s.state.hands[s.humanSeat];
-    const code = e.code;
-    if (code === 'Escape') {
+    if (is('cancel')) {
       if (this.selection.length) { this.selection = []; this.syncAll(); }
       else this.overlay('overlay-pause', true);
       e.preventDefault(); return;
     }
-    if (code === b.pause || code === 'KeyP') { this.overlay('overlay-pause', true); e.preventDefault(); return; }
+    if (is('pause')) { this.overlay('overlay-pause', true); e.preventDefault(); return; }
     if (s.isOver()) return;
-    if (code === b.left) { this.focusIdx = Math.max(0, this.focusIdx - 1); this.focusCard(); e.preventDefault(); }
-    else if (code === b.right) { this.focusIdx = Math.min(hand.cards.length - 1, this.focusIdx + 1); this.focusCard(); e.preventDefault(); }
-    else if (code === b.confirm || code === 'Space') {
+    if (is('left')) { this.focusIdx = Math.max(0, this.focusIdx - 1); this.focusCard(); e.preventDefault(); }
+    else if (is('right')) { this.focusIdx = Math.min(hand.cards.length - 1, this.focusIdx + 1); this.focusCard(); e.preventDefault(); }
+    else if (is('confirm')) {
       if (hand.cards[this.focusIdx] !== undefined) this.toggleCard(hand.cards[this.focusIdx]);
       e.preventDefault();
     }
-    else if (code === b.drawDeck || code === 'KeyD') { this.doDraw('deck'); e.preventDefault(); }
-    else if (code === b.drawDiscard || code === 'KeyF') { this.doDraw('discard'); e.preventDefault(); }
-    else if (code === b.meld || code === 'KeyM') { this.doMeld(); e.preventDefault(); }
-    else if (code === b.layoff || code === 'KeyL') { this.doLayoff(); e.preventDefault(); }
-    else if (code === b.discard || code === 'KeyX') { this.doDiscard(); e.preventDefault(); }
-    else if (code === b.undo || code === 'KeyU') { s.undo(); e.preventDefault(); }
-    else if (code === b.hint || code === 'KeyH') { this.doHint(); e.preventDefault(); }
-    else if (code === b.cameraReset || code === 'KeyC') { if (this.onCameraReset) this.onCameraReset(); e.preventDefault(); }
+    else if (is('drawDeck')) { this.doDraw('deck'); e.preventDefault(); }
+    else if (is('drawDiscard')) { this.doDraw('discard'); e.preventDefault(); }
+    else if (is('meld')) { this.doMeld(); e.preventDefault(); }
+    else if (is('layoff')) { this.doLayoff(); e.preventDefault(); }
+    else if (is('discard')) { this.doDiscard(); e.preventDefault(); }
+    else if (is('undo')) { s.undo(); e.preventDefault(); }
+    else if (is('hint')) { this.doHint(); e.preventDefault(); }
+    else if (is('cameraReset')) { if (this.onCameraReset) this.onCameraReset(); e.preventDefault(); }
   };
 
   UI.prototype.focusCard = function () {
@@ -619,14 +543,10 @@
     click('btn-help', function () { self.showHelp('title'); });
     click('btn-settings', function () { self.overlay('overlay-settings', true); });
     click('btn-mode-back', function () {
-      if (self.pendingHosted) { self.pendingHosted.close(); self.pendingHosted = null; }
-      self.pendingHostedReady = false;
       self.show('title');
       self.refreshTitle();
     });
     click('btn-mode-start', function () { self.startPendingMode(); });
-    click('btn-host-table', function () { self.hostTable(); });
-    click('btn-join-table', function () { self.joinTable(); });
 
     click('act-draw-deck', function () { self.doDraw('deck'); });
     click('act-draw-discard', function () { self.doDraw('discard'); });
@@ -643,7 +563,6 @@
     click('btn-leave', function () {
       self.overlay('overlay-pause', false);
       if (self.session && self.session.aiTimer) clearTimeout(self.session.aiTimer);
-      if (self.session && self.session.close) self.session.close();
       self.session = null;
       self.show('title'); self.refreshTitle();
     });
@@ -652,19 +571,11 @@
       if (self.helpReturn === 'play') self.show('play'); else { self.show('title'); self.refreshTitle(); }
     });
     click('btn-results-leave', function () {
-      if (self.session && self.session.close) self.session.close();
       self.session = null; self.show('title'); self.refreshTitle();
     });
     click('btn-results-replay', function () { self.replayLast(); });
     click('btn-results-next', function () {
       const s = self.session;
-      if (s && s.mode === 'hosted' && s.state.phase !== 'roundOver') {
-        // hosted match over (or abandoned): the table closes, no rematch flow
-        if (s.close) s.close();
-        self.session = null;
-        self.show('title'); self.refreshTitle();
-        return;
-      }
       if (s && s.state.phase === 'roundOver') { s.nextRound(); self.show('play'); self.syncAll(); Audio.play('deal'); }
       else if (s) {
         if (s.mode === 'journey' && s.resultSummary && s.resultSummary.matchWinner === s.humanSeat) {
@@ -697,10 +608,7 @@
   UI.prototype.replayLast = function () {
     const s = this.session;
     if (!s || !s.resultSummary) return;
-    if (!s.resultSummary.replay) {
-      this.announce('Replay is not available for hosted tables.');
-      return;
-    }
+    if (!s.resultSummary.replay) return;
     const env = s.resultSummary.replay;
     const v = Rules.verifyReplay(env);
     this.announce(v.ok ? 'Replay verified: identical final state.' : 'Replay mismatch: ' + v.reason);

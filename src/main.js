@@ -12,7 +12,6 @@
   const Render = window.MeldRender;
   const UI = window.MeldUI;
   const Platform = window.MeldPlatform || null;
-  const Net = window.MeldNet || null;
 
   /* anonymous funnel events (start, tutorial step, round end, retry, settings, error) */
   const funnel = [];
@@ -47,20 +46,19 @@
     }
   }
 
-  /* platform time sync (round-trip adjusted), recoverable on failure.
-     Authenticated when a launch token is present; silent otherwise. */
+  /* platform time sync (round-trip adjusted), signed in only: a standalone
+     load makes no network request and keeps the local clock. */
   function syncTime() {
+    const sh = window.StarHermit;
+    if (!(Platform && Platform.enabled()) || !sh || !sh.api) return;
     const t0 = Date.now();
-    const req = (Platform && Platform.enabled())
-      ? Platform.api('/api/v1/time')
-      : fetch('/api/v1/time').then(function (r) { return r.json(); });
-    Promise.resolve(req).then(function (j) {
+    sh.api('/api/v1/time').then(function (j) {
       if (j && typeof j.now === 'number') {
         const t1 = Date.now();
         UI.serverOffset = j.now - Math.round((t0 + t1) / 2);
         UI.refreshTitle();
       }
-    }).catch(function () { /* offline: local clock is fine */ });
+    }).catch(function () { /* local clock is fine */ });
   }
 
   /* theme for session */
@@ -261,15 +259,47 @@
   document.getElementById('btn-pause-settings').addEventListener('click', function () { if (gfxPanel) gfxPanel.refresh(); });
 
   /* StarHermit platform: launch token (fragment read once + stripped),
-     identity, cloud-save mirror, sync status, hosted-table probe. */
+     identity, cloud-save mirror, sync status. */
   if (Platform) {
+    const shT = window.ShStrings.shStrings(navigator.languages || [navigator.language]);
+    let toastTimer = null;
+    const toast = function (text) {
+      const el = document.getElementById('sh-toast');
+      el.textContent = text;
+      el.hidden = false;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { el.hidden = true; }, 3200);
+    };
+    // Sign-in (platform host, no token) / invite (signed in); hidden locally.
+    const refreshAccount = function () {
+      document.getElementById('btn-signin').classList.toggle('hidden', !Platform.canSignIn());
+      document.getElementById('btn-invite').classList.toggle('hidden', !Platform.enabled());
+    };
+    document.getElementById('btn-signin').textContent = shT.signIn;
+    document.getElementById('btn-invite').textContent = shT.invite;
+    document.getElementById('btn-signin').addEventListener('click', function () { Platform.signIn(); });
+    document.getElementById('btn-invite').addEventListener('click', function () {
+      const link = Platform.inviteLink();
+      if (!link) return;
+      Audio.play('ui');
+      navigator.clipboard.writeText(link).then(function () { toast(shT.copied); }, function () { toast(shT.copyFailed); });
+    });
     Platform.boot(Session);
+    refreshAccount();
     Platform.onSync(function () { UI.refreshTitle(); });
+    Platform.onAuth(function (a) {
+      refreshAccount();
+      UI.refreshTitle();
+      if (!a.signedIn) toast(shT.signedOut); // keep playing locally
+    });
     Platform.initCloud(Session).then(function (mergedRemote) {
       if (mergedRemote) UI.refreshTitle(); // remote progress reseeded the cache
     });
+    Platform.loadSettings(Session, settings).then(function (changed) {
+      if (changed) { UI.bindSettingsValues(); UI.applySettings(); applyGraphics(); if (gfxPanel) gfxPanel.refresh(); }
+    });
+    Platform.loadBindings(UI.defaultKeys()).then(function (keys) { UI.setKeys(keys); });
   }
-  if (Net) Net.probe().then(function (ok) { UI.hostedAvailable = ok; });
 
   UI.show('title');
   UI.refreshTitle();
