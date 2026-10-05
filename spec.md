@@ -299,6 +299,11 @@ fixed backdrop behind the screen layer; `#screen-play` is `pointer-events:none` 
 re-enabled, so canvas picking works through the empty middle of the layout while every control
 stays clickable.
 
+**Large screens.** `ui-scale.js` sets `--ui-scale` (exactly 1 up to a 1600×1000 viewport, then
+`min(w/1600, h/1000)`, capped at 2.5); every screen, overlay and toast zooms by it, so the HUD,
+rails, tray, hand strip and panels keep their desktop proportions on 2K–4K monitors, while the 3D
+canvas stays unzoomed full-viewport and frames the table between the zoomed HUD and hand.
+
 **Safe areas.** `--sat/--sab/--sal/--sar` come from `env(safe-area-inset-*)`; every screen pads by
 them and both the action tray and the caption toast add `--sab` to their bottom offset, so the
 tray never sits under a home indicator. `viewport-fit=cover` is set in the head.
