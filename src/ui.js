@@ -53,7 +53,9 @@
     if (open) {
       this.lastFocus = document.activeElement;
       const b = ov.querySelector('button.primary, button');
-      if (b) b.focus();
+      // focus the primary action without scrolling a tall panel past its heading
+      if (b) b.focus({ preventScroll: true });
+      if (ov.firstElementChild) ov.firstElementChild.scrollTop = 0;
     } else if (this.lastFocus && this.lastFocus.focus) {
       this.lastFocus.focus(); // focus restoration after modal
     }

@@ -282,7 +282,10 @@
       const link = Platform.inviteLink();
       if (!link) return;
       Audio.play('ui');
-      navigator.clipboard.writeText(link).then(function () { toast(shT.copied); }, function () { toast(shT.copyFailed); });
+      // navigator.clipboard is undefined outside secure contexts: report it instead of throwing
+      const clip = navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(link) : Promise.reject(new Error('clipboard unavailable'));
+      clip.then(function () { toast(shT.copied); }, function () { toast(shT.copyFailed); });
     });
     Platform.boot(Session);
     refreshAccount();
