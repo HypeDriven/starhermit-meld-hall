@@ -299,6 +299,12 @@ fixed backdrop behind the screen layer; `#screen-play` is `pointer-events:none` 
 re-enabled, so canvas picking works through the empty middle of the layout while every control
 stays clickable.
 
+**Short landscape phones** (≤500 px tall, <1024 px wide). The HUD is one band (objective on its own
+wrapping line, badges below it), the action tray becomes a two-column block on the right (key hints
+hidden; they stay in Help) and the hand strip (44×60 px cards) runs under the table, so the 3D table
+gets the whole left band. `render.js resize()` frames the table between the HUD, the hand strip and a
+right-hand tray column (`setViewOffset` narrows the band from the right).
+
 **Large screens.** `ui-scale.js` sets `--ui-scale` (exactly 1 up to a 1600×1000 viewport, then
 `min(w/1600, h/1000)`, capped at 2.5); every screen, overlay and toast zooms by it, so the HUD,
 rails, tray, hand strip and panels keep their desktop proportions on 2K–4K monitors, while the 3D
@@ -432,7 +438,7 @@ Canonical copy: `sfx/manifest.txt`. Generator input: `sfx/manifest.json`.
 | `ui` | `ui-click.opus`, `ui-confirm.opus` | Wooden click / tick | Menu buttons and settings commits |
 
 **Captions.** With *Captions for sounds* on (default), every event above except `ui` pushes its
-caption into `#caption-toast` for 1.8 s, positioned above the tray and clear of the safe area.
+caption into `#caption-toast` for 1.8 s, positioned above the tray in play and clear of the safe area. On menus and results it sits at the bottom edge, and the results screen pads its bottom so the caption never touches the panel.
 
 ---
 

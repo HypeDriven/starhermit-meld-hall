@@ -871,21 +871,28 @@
     this.camera.aspect = w / h;
     // Frame the table rows inside the canvas band not covered by the HUD
     // (top bar) and the DOM hand/tray (bottom), for any aspect ratio.
-    let top = 0, bottom = 0;
+    // A tray standing as a column on the right (short landscape phones) narrows
+    // the band from the right instead.
+    let top = 0, bottom = 0, right = 0;
     if (typeof document !== 'undefined') {
       const cr = this.canvas.getBoundingClientRect();
       const band = function (id) {
         const el = document.getElementById(id);
         if (!el || !el.offsetParent) return null;
         const r = el.getBoundingClientRect();
-        return r.height ? { t: r.top - cr.top, b: r.bottom - cr.top } : null;
+        return r.height ? { t: r.top - cr.top, b: r.bottom - cr.top, l: r.left - cr.left } : null;
       };
       const hud = band('hud-top'); if (hud && hud.b < h * 0.4) top = hud.b;
-      for (const id of ['hand-dom', 'action-tray']) { const r = band(id); if (r && r.t > h * 0.5) bottom = Math.max(bottom, h - r.t); }
+      for (const id of ['hand-dom', 'action-tray']) {
+        const r = band(id); if (!r) continue;
+        if (r.t > h * 0.5) bottom = Math.max(bottom, h - r.t);
+        else if (r.l > w * 0.5) right = Math.max(right, w - r.l);
+      }
     }
     const safeH = Math.max(120, h - top - bottom);
-    this.camera.setViewOffset(w, safeH, 0, -top, w, h);
-    this.camera.aspect = w / safeH;
+    const safeW = Math.max(160, w - right);
+    this.camera.setViewOffset(safeW, safeH, 0, -top, w, h);
+    this.camera.aspect = safeW / safeH;
     const tanV = Math.tan(FRAMING.fov * Math.PI / 360);
     const halfW = 5.0, halfD = 3.6; // hand row to deck row, with margin
     const base = Math.hypot(FRAMING.cameraPos.y - FRAMING.lookAt.y, FRAMING.cameraPos.z - FRAMING.lookAt.z);
