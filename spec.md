@@ -18,7 +18,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | Session | One round 2–4 min; a match to the target score 5–15 min |
 | Platforms | Desktop and mobile browsers, portrait and landscape |
 | Rendering | Three.js card table on `<canvas id="gl">`, with a complete semantic DOM mirror layered above it — the DOM is playable on its own when WebGL is unavailable |
-| Networking | None standalone (zero own-server requests). StarHermit platform glue (over `starhermit-sdk.js`) in `src/platform.js`; `server.js` is a local static host |
+| Networking | None standalone (zero own-server requests). StarHermit platform glue (over `starhermit-sdk.js`) in `src/platform.js`; `score-script.js` is the platform script (leaderboard posting); `server.js` is a local static host |
 
 ### File map
 
@@ -28,8 +28,8 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/rules.js` | Pure deterministic rules engine (`window.MeldRules` / CommonJS). No DOM, no timers |
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
 | `starhermit-sdk.js` | Shared StarHermit client (unmodified copy) |
-| `src/platform.js` | `MeldPlatform` over the SDK: identity, sign-in/invite, cloud-save mirror, settings KV, key bindings, read-only leaderboard, sync status |
-| `src/sh-strings.js` | Account strings (sign-in, invite, toasts) in the nine locales |
+| `src/platform.js` | `MeldPlatform` over the SDK: identity, sign-in/invite, cloud-save mirror, settings KV, key bindings, leaderboard read + score posting, sync status |
+| `src/sh-strings.js` | Account strings (sign-in, invite, toasts, leaderboard line) in the nine locales |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
 | `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
 | `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, GPU detection, `resolve()`, `presetTier()`, `describe()` |
@@ -41,6 +41,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/three.min.js` | Vendored Three.js r137 (UMD build, `window.THREE`) — the renderer the game uses |
 | `src/vendor/three-r137/` | Same-revision addons from `three@0.137.0/examples/js`: EffectComposer, RenderPass, ShaderPass, MaskPass, UnrealBloomPass, SMAAPass, SSAOPass, their shaders, SimplexNoise, RoomEnvironment |
 | `src/three.module.js` | Three.js r170 ES module, vendored but not loaded |
+| `score-script.js` | StarHermit platform script (`server=`): range-checks a finished match total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
 | `server.js` | Local static server; its legacy time/health endpoints and `/ws` hosted sessions are no longer called by the client |
 | `tests/run.js` | 58 offline tests: rules, scoring, fuzzing, replay determinism, content validation, the StarHermit adapter over the real SDK with a stubbed fetch, graphics model and panel locales |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
@@ -487,12 +488,13 @@ tray wraps, so a 30–40% expansion in German or French costs height, never clip
 
 ## 12. StarHermit integration
 
-`starhermit.txt` declares `name=Meld Hall`, `launch=index.html`, `owner`, `server=server.js`,
+`starhermit.txt` declares `name=Meld Hall`, `launch=index.html`, `owner`, `server=score-script.js`,
 `cover=coverart.png`, per https://wiki.starhermit.com/ conventions.
 
 **Used today**
 
-- *Server script.* `server.js` is the declared platform server: it hosts the static bundle
+- *Platform script.* `score-script.js` is the declared platform script (leaderboard posting, below).
+  `server.js` is the local dev server: it hosts the static bundle
   (refusing dotfiles and `node_modules`, with a normalized-path traversal guard) and exposes
   `GET /api/v1/health` → `{ok, rules}`.
 - *Standalone.* Without a launch token the client makes no own-server request (no time probe,
@@ -520,16 +522,19 @@ tray wraps, so a 30–40% expansion in German or French costs height, never clip
   Help controls list shows the effective keys.
 - *Invite link.* Signed-in players get **Invite a friend** on the title, copying
   `StarHermit.inviteLink()` with a confirmation toast.
-- *Daily board (read-only).* Daily results show the game's first platform board when one exists
-  (`StarHermit.leaderboard()`, names via profiles). Clients never submit scores; personal bests
-  stay in the save doc.
+- *Leaderboard posting.* Signed in, every finished match except lessons posts the player's match
+  total once through `StarHermit.submitScores` (a practice session whose `score-script.js` posts
+  it to the `high-score` board "Match score", integer, higher is better, 0–1000), and the results
+  screen shows "Leaderboard rank: #N" (or posted / not posted). Round results post nothing;
+  standalone posts nothing and shows no line.
+- *Leaderboard on daily results.* Daily results also list the top 10 of the game's first platform
+  board (`StarHermit.leaderboard()`, names via profiles); personal bests stay in the save doc.
 
 **Not used**
 
-Platform sessions/matchmaking/chat/replays (`server.js` is a standalone Node host, not a
-platform game script), presence, telemetry/activity and server-side achievement sync — achievements and career stats
+Platform matchmaking/chat/replays (`score-script.js` only posts scores), presence, telemetry/activity and server-side achievement sync — achievements and career stats
 stay local (inside the cloud-saved progress doc), and the local funnel is never transmitted.
-Score submission to leaderboards does not exist (read-only board, above). Realtime-rooms
+Realtime-rooms
 matchmaking/friends invites are not used. The legacy hosted-table `/ws` backend in `server.js`
 is no longer reachable from the client (it only ever worked against the dev server), so the
 Hosted mode was removed.
@@ -667,8 +672,7 @@ weight without changing the silhouette.
 3. **Enforced challenge goals.** Turn and deadwood constraints evaluated in the session driver so a
    challenge can be failed, with the failure reason shown on the results screen.
 4. **Online tables and score submission.** Two-player tables over platform-routed realtime rooms
-   (matchmaking/friend invites). Ranked daily submission to the shared board (the board is read-only
-   today because clients cannot post scores).
+   (matchmaking/friend invites). A separate ranked daily board.
 
 ## Browser interference
 

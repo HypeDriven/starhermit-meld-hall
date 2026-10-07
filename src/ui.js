@@ -380,11 +380,33 @@
         }).join('')
       : '';
     this.showDailyBoard();
+    this.postToLeaderboard();
     $('btn-results-next').textContent = r.phase === 'roundOver' ? 'Next round' : 'Play again';
     this.show('results');
     Audio.play(r.phase === 'matchOver' && r.matchWinner === s.humanSeat ? 'matchWin'
       : r.humanWon ? 'roundWin' : 'roundLose');
     this.announce($('results-headline').textContent);
+  };
+
+  // Signed in only: a finished match (not a lesson) posts the human's match
+  // total once and the results screen shows the board rank.
+  UI.prototype.postToLeaderboard = function () {
+    const line = $('results-lb');
+    if (!line) return;
+    line.hidden = true;
+    const s = this.session;
+    if (!s || !s.resultSummary || s.resultSummary.phase !== 'matchOver' || s.mode === 'learn' ||
+      !Platform || !Platform.enabled()) return;
+    const T = globalThis.ShStrings.shStrings(navigator.languages || [navigator.language]);
+    line.hidden = false;
+    line.textContent = T.lbPosting;
+    if (!s.lbPost) s.lbPost = Platform.submitScore(s.state.scores[s.humanSeat]);
+    const self = this;
+    s.lbPost.then(function (r) {
+      if (self.session !== s) return;
+      line.textContent = !r.posted ? T.lbNotPosted
+        : r.rank ? T.lbRank.replace('{rank}', r.rank) : T.lbPosted;
+    });
   };
 
   // Daily is the ranked mode: show the shared board read-only when the
@@ -397,12 +419,12 @@
     board.innerHTML = '<p class="muted">Loading daily board…</p>';
     Platform.fetchLeaderboard().then(function (entries) {
       board.innerHTML = (!entries || !entries.length) ? '' :
-        '<h3>Daily board</h3>' +
+        '<h3>Leaderboard</h3>' +
         '<table class="score-table"><tr><th>#</th><th>Player</th><th>Score</th></tr>' +
         entries.map(function (e) {
           return '<tr><td>' + e.rank + '</td><td>' + esc(e.name) + '</td><td>' + e.score + '</td></tr>';
         }).join('') + '</table>' +
-        '<p class="muted">Read-only board — personal bests are kept in your save.</p>';
+        '<p class="muted">Personal bests are kept in your save.</p>';
     });
   };
 

@@ -160,6 +160,20 @@
     }).catch(function () { return null; });
   }
 
+  /* ---------- leaderboard posting (score-script.js) ---------- */
+  // Signed in only: posts a finished match total through submitScores to the
+  // high-score board. Resolves { posted, rank } (rank or null).
+  function submitScore(total) {
+    if (!enabled()) return Promise.resolve({ posted: false, rank: null });
+    return sh.submitScores({ 'high-score': total }).then(function (keys) {
+      if (!keys || keys.indexOf('high-score') < 0) return { posted: false, rank: null };
+      return sh.leaderboard('high-score', { pageSize: 100 }).then(function (r) {
+        const me = ((r && r.items) || []).filter(function (i) { return i.userId === sh.userId; })[0];
+        return { posted: true, rank: me ? me.rank : null };
+      }, function () { return { posted: true, rank: null }; });
+    }, function () { return { posted: false, rank: null }; });
+  }
+
   /* ---------- boot ---------- */
   // Reads the launch token via the SDK and wires save/settings mirroring.
   // Returns true when signed in.
@@ -197,6 +211,7 @@
     signIn: function () { return !!sh && sh.signIn(); },
     inviteLink: function () { return enabled() ? sh.inviteLink() : null; },
     fetchLeaderboard: fetchLeaderboard,
+    submitScore: submitScore,
     profileName: profileName,
   };
 });
