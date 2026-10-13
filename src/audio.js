@@ -35,7 +35,7 @@
       for (const b of ['music', 'effects', 'ambience', 'voice']) {
         const g = this.ctx.createGain();
         g.connect(master);
-        this.buses[b] = g;
+        this.buses[b] = (globalThis.GameOptions ? globalThis.GameOptions.tagBus(g, b) : g);
       }
       this.applySettings(this.settings);
       this._startAmbience();
@@ -57,7 +57,7 @@
   Audio.prototype.onCaption = function (fn) { this.captionListener = fn; };
 
   function tone(ctx, bus, freq, dur, type, gain, slide) {
-    const o = ctx.createOscillator(), g = ctx.createGain();
+    const o = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), bus) : ctx.createOscillator()), g = ctx.createGain();
     o.type = type; o.frequency.value = freq;
     if (slide) o.frequency.exponentialRampToValueAtTime(slide, ctx.currentTime + dur);
     g.gain.value = gain;
@@ -70,7 +70,7 @@
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; ++i) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const src = ctx.createBufferSource(); src.buffer = buf;
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), bus) : ctx.createBufferSource()); src.buffer = buf;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filterFreq || 2000;
     const g = ctx.createGain(); g.gain.value = gain;
     src.connect(f); f.connect(g); g.connect(bus);
@@ -141,7 +141,7 @@
     for (let i = 0; i < names.length; ++i) {
       const buf = this.sfxBuffers[names[(start + i) % names.length]];
       if (!buf) continue;
-      const src = this.ctx.createBufferSource();
+      const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
       src.buffer = buf;
       src.connect(this.buses.effects);
       src.start();
@@ -192,7 +192,7 @@
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; ++i) d[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), null) : ctx.createBufferSource()); src.buffer = buf; src.loop = true;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
     src.connect(f); f.connect(this.buses.ambience);
     src.start();
@@ -211,7 +211,7 @@
       const chord = chords[step++ % chords.length];
       const dur = 3.2;
       for (const f of chord) {
-        const o = ctx.createOscillator(), g = ctx.createGain();
+        const o = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), null) : ctx.createOscillator()), g = ctx.createGain();
         o.type = 'triangle'; o.frequency.value = f * (1 + self.musicIntensity * 0.5);
         g.gain.setValueAtTime(0.0001, ctx.currentTime);
         g.gain.linearRampToValueAtTime(0.05 + self.musicIntensity * 0.05, ctx.currentTime + 0.8);

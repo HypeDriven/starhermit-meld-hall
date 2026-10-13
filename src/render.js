@@ -854,9 +854,9 @@
         u.cameraNear.value = this.camera.near; u.cameraFar.value = this.camera.far;
         this.ssao.depthRenderMaterial.uniforms.cameraFar.value = this.camera.far;
       }
-      this.composer.render(dt / 1000);
+      (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dt / 1000)) : this.composer.render(dt / 1000));
     } else {
-      this.renderer.render(this.scene, this.camera);
+      (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
     }
   };
 
