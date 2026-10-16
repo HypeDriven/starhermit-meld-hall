@@ -1,8 +1,8 @@
 'use strict';
 /*
  * Meld Hall — Graphics section of the Settings overlay.
- * Builds the controls into #gfx-section, localizes them (navigator.language;
- * the rest of the game is English), stores choices in settings.graphics and
+ * Builds the controls into #gfx-section, localizes them (the game language;
+ * setLocale relabels them live), stores choices in settings.graphics and
  * reports every change through onChange so main.js can apply it live.
  */
 (function (root, factory) {
@@ -137,7 +137,7 @@
   function mount(opts) {
     const host = document.getElementById('gfx-section');
     if (!host) return null;
-    const L = STRINGS[pickLocale(opts.locale)];
+    let L = STRINGS[pickLocale(opts.locale)];
     const s = opts.settings;
     if (!s.graphics || typeof s.graphics !== 'object') s.graphics = { preset: 'auto' };
     const qSel = document.getElementById('set-quality');
@@ -181,12 +181,14 @@
     function toggle(id, key, text) {
       const lab = el('label', { class: 'gfx-toggle' });
       const cb = el('input', { id: id, type: 'checkbox', 'data-gfx': key });
-      lab.append(cb, ' ' + text);
+      lab.append(cb, ' ', el('span', { 'data-gfx-text': key }, text));
       toggles.appendChild(lab);
       return cb;
     }
     const adaptive = toggle('gfx-adaptive', 'adaptive', L.adaptive);
     const showFps = toggle('gfx-show-fps', 'show_fps', L.showFps);
+    const catLabels = {};
+    for (const cat in catSel) catLabels[cat] = host.querySelector('label[for="gfx-cat-' + cat + '"]');
     const sumEl = document.getElementById('gfx-summary');
     const noteEl = document.getElementById('gfx-post-note');
     noteEl.textContent = L.postFailed;
@@ -219,6 +221,23 @@
       noteEl.hidden = !info.postFailed;
     }
     self.refresh = refresh;
+    // Relabel every control in another locale (Settings → Language), then refresh values.
+    self.setLocale = function (locale) {
+      L = STRINGS[pickLocale(locale)];
+      self.L = L;
+      host.querySelector('h3').textContent = L.title;
+      host.setAttribute('lang', pickLocale(locale));
+      document.querySelector('label[for="set-quality"]').textContent = L.quality;
+      scaleName.textContent = L.scale;
+      for (const cat in catSel) {
+        if (catLabels[cat]) catLabels[cat].textContent = L.cats[cat];
+        Gfx.CATEGORIES[cat].forEach(function (t, i) { catSel[cat].options[i + 1].textContent = L.tiers[t]; });
+      }
+      toggles.querySelector('[data-gfx-text="adaptive"]').textContent = L.adaptive;
+      toggles.querySelector('[data-gfx-text="show_fps"]').textContent = L.showFps;
+      noteEl.textContent = L.postFailed;
+      refresh();
+    };
     self.refreshSummary = function () {
       const info = opts.info();
       sumEl.textContent = summary(L, info);

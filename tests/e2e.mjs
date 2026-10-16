@@ -23,9 +23,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { stubStarHermit, launchToken } from './starhermit-e2e.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SHOT = (stage, tag) => `/tmp/meld-hall-e2e-${stage}-${tag}.png`;
+// Screenshots go to $E2E_SHOT_DIR (default /tmp).
+const SHOT = (stage, tag) => path.join(process.env.E2E_SHOT_DIR || '/tmp', `meld-hall-e2e-${stage}-${tag}.png`);
 
 // benign GPU/swiftshader noise (from tools/production_game_audit.mjs)
 const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fallback to software WebGL|EnableWebGLDeveloperExtensions/i;
@@ -151,6 +153,75 @@ async function playUntilRoundEnd(page, opts = {}) {
   throw new Error('round did not finish within 400 iterations');
 }
 
+/* ---------- signed-in language flow (own context, stubbed StarHermit API) ---------- */
+
+async function languagePass(browser, viewport, touch) {
+  const context = await browser.newContext({ viewport, hasTouch: touch });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
+  });
+  const act = touch ? (sel) => page.tap(sel) : (sel) => page.click(sel);
+  const tag = touch ? 'mobile' : 'desktop';
+  try {
+    const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+    await page.goto('about:blank');
+    await page.goto(`http://127.0.0.1:${PORT}/index.html#game_token=${launchToken()}`, { waitUntil: 'load' });
+    await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+    await page.waitForSelector('#screen-title.active');
+    if ((await page.textContent('#btn-play')).trim() !== 'Jouer') throw new Error('title not in French');
+    // Start a practice match in French, then switch language mid-match.
+    await act('#btn-play');
+    await page.waitForSelector('#screen-mode.active');
+    await page.locator('#mode-list').getByRole('button', { name: 'Entraînement', exact: true }).click();
+    await act('#btn-mode-start');
+    await page.waitForSelector('#screen-play.active');
+    await waitHumanDraw(page);
+    if (!/^Pioche : \d+$/.test((await page.textContent('#hud-deck')).trim())) throw new Error('HUD not in French');
+    await act('#btn-pause');
+    await page.waitForSelector('#overlay-pause.active');
+    await act('#btn-pause-settings');
+    await page.waitForSelector('#overlay-settings.active');
+    const choice = page.locator('[data-game-language="choice"]');
+    await choice.scrollIntoViewIfNeeded();
+    const auto = await choice.locator('option').first().textContent();
+    if (!/^Automatique — Français \(Canada\)$/.test(auto)) throw new Error('Automatic label not resolved: ' + auto);
+    await choice.selectOption('it-IT');
+    await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+    await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]').textContent));
+    if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+    if ((await page.textContent('#settings-h')).trim() !== 'Impostazioni') throw new Error('settings title not re-rendered');
+    if ((await page.textContent('#gfx-h')).trim() !== 'Grafica') throw new Error('graphics heading not re-rendered');
+    await page.getByLabel('Movimento ridotto', { exact: true }).waitFor();
+    await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+    await page.fill('[data-game-report="title"]', 'Test report');
+    await page.click('[data-game-report="send"]');
+    await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+    if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+    await page.screenshot({ path: SHOT('language', tag) });
+    // The match re-rendered in place: same session, Italian HUD and action tray.
+    await page.locator('#btn-settings-close').scrollIntoViewIfNeeded();
+    await act('#btn-settings-close');
+    if ((await page.textContent('#pause-h')).trim() !== 'In pausa') throw new Error('pause overlay not re-rendered');
+    await act('#btn-resume');
+    if (!/^Mazzo: \d+$/.test((await page.textContent('#hud-deck')).trim())) throw new Error('HUD not re-rendered in Italian');
+    if (!/^Scarta/.test((await page.textContent('#act-discard')).trim())) throw new Error('action tray not re-rendered');
+    await page.screenshot({ path: SHOT('language-hud', tag) });
+    // Back to Automatic → fr-CA.
+    await act('#btn-pause');
+    await act('#btn-pause-settings');
+    await choice.scrollIntoViewIfNeeded();
+    await choice.selectOption('auto');
+    await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+    if (calls.settings['ui.language']?.choice !== 'auto') throw new Error('ui.language auto not saved');
+  } finally {
+    await context.close();
+  }
+  if (errors.length) throw new Error('language pass page errors:\n' + errors.join('\n'));
+}
+
 /* ---------- one full playthrough pass ---------- */
 
 async function playthrough(browser, tag, viewport, touch, maxRounds) {
@@ -230,6 +301,10 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
       await page.waitForFunction(() => !document.getElementById('overlay-settings').classList.contains('active'));
     });
 
+    await step('Language: Automatic follows the StarHermit preferred language; switching mid-match re-renders; ui.language; report a problem', async () => {
+      await languagePass(browser, viewport, touch);
+    });
+
     await step('help screen open/back', async () => {
       await act('#btn-help');
       await page.waitForSelector('#screen-help.active');
@@ -240,7 +315,7 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
     await step('mode select -> practice, target 30', async () => {
       await act('#btn-play');
       await page.waitForSelector('#screen-mode.active');
-      await page.locator('#mode-list button', { hasText: 'Practice' }).click();
+      await page.locator('#mode-list').getByRole('button', { name: 'Practice', exact: true }).click();
       await page.selectOption('#opt-target', '30');
       await page.selectOption('#opt-players', '2');
       await page.screenshot({ path: SHOT('mode', tag) });

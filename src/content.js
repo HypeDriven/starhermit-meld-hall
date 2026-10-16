@@ -10,6 +10,8 @@
 })(typeof self !== 'undefined' ? self : globalThis, function () {
 
   const CONTENT_VERSION = '1.0.0';
+  // N() marks player-facing English keys; src/i18n.js translates them where they are shown.
+  const N = function (key) { return key; };
 
   /* ---------- five original visual themes ---------- */
   const THEMES = [
@@ -115,36 +117,36 @@
   /* ---------- learn-mode lessons: one rule at a time, player must act ---------- */
   const LESSONS = [
     {
-      id: 'lesson_draw', title: 'Drawing a card',
-      text: 'Every turn begins with a draw. Take the top card of the deck, or the face-up discard.',
+      id: 'lesson_draw', title: N('Drawing a card'),
+      text: N('Every turn begins with a draw. Take the top card of the deck, or the face-up discard.'),
       require: { type: 'draw' }, seed: hashStr('lesson-draw'), players: 2, targetScore: 15,
     },
     {
-      id: 'lesson_discard', title: 'Discarding',
-      text: 'End your turn by discarding one card. Keep your deadwood low.',
+      id: 'lesson_discard', title: N('Discarding'),
+      text: N('End your turn by discarding one card. Keep your deadwood low.'),
       require: { type: 'discard' }, seed: hashStr('lesson-discard'), players: 2, targetScore: 15,
     },
     {
-      id: 'lesson_set', title: 'Sets',
-      text: 'Three or four cards of the same rank form a set. Meld one now.',
+      id: 'lesson_set', title: N('Sets'),
+      text: N('Three or four cards of the same rank form a set. Meld one now.'),
       require: { type: 'meld', kind: 'set' }, seed: hashStr('lesson-set'), players: 2, targetScore: 15,
       rigged: 'set',
     },
     {
-      id: 'lesson_run', title: 'Runs',
-      text: 'Three or more consecutive cards of one suit form a run. Meld one now.',
+      id: 'lesson_run', title: N('Runs'),
+      text: N('Three or more consecutive cards of one suit form a run. Meld one now.'),
       require: { type: 'meld', kind: 'run' }, seed: hashStr('lesson-run'), players: 2, targetScore: 15,
       rigged: 'run',
     },
     {
-      id: 'lesson_layoff', title: 'Laying off',
-      text: 'Add a card from your hand to a meld already on the table.',
+      id: 'lesson_layoff', title: N('Laying off'),
+      text: N('Add a card from your hand to a meld already on the table.'),
       require: { type: 'layoff' }, seed: hashStr('lesson-layoff'), players: 2, targetScore: 15,
       rigged: 'layoff',
     },
     {
-      id: 'lesson_deadwood', title: 'Deadwood',
-      text: 'Cards left in hand when someone goes out count against them. Go out to win the round.',
+      id: 'lesson_deadwood', title: N('Deadwood'),
+      text: N('Cards left in hand when someone goes out count against them. Go out to win the round.'),
       require: { type: 'any' }, seed: hashStr('lesson-deadwood'), players: 2, targetScore: 30,
     },
   ];
@@ -152,29 +154,29 @@
   /* ---------- challenges ---------- */
   const CHALLENGES = [
     {
-      id: 'ch_speed', title: 'Quick Fingers', kind: 'speed',
-      text: 'Win a match in 25 turns or fewer.',
+      id: 'ch_speed', title: N('Quick Fingers'), kind: 'speed',
+      text: N('Win a match in 25 turns or fewer.'),
       seed: hashStr('challenge-speed'), players: 2, targetScore: 40, turnLimit: 25,
     },
     {
-      id: 'ch_frugal', title: 'Low Deadwood', kind: 'deadwood',
-      text: 'Win a round while holding 5 or fewer deadwood points.',
+      id: 'ch_frugal', title: N('Low Deadwood'), kind: 'deadwood',
+      text: N('Win a round while holding 5 or fewer deadwood points.'),
       seed: hashStr('challenge-frugal'), players: 2, targetScore: 40, maxDeadwoodOnWin: 5,
     },
     {
-      id: 'ch_crowd', title: 'Full Hall', kind: 'layout',
-      text: 'Four players, no lays from the discard pile on your first turn each round.',
+      id: 'ch_crowd', title: N('Full Hall'), kind: 'layout',
+      text: N('Four players, no lays from the discard pile on your first turn each round.'),
       seed: hashStr('challenge-crowd'), players: 4, targetScore: 60,
     },
   ];
 
   /* ---------- achievements (stable lowercase keys, idempotent) ---------- */
   const ACHIEVEMENTS = [
-    { key: 'first_out', title: 'First Out', text: 'Win your first round.' },
-    { key: 'meld_master', title: 'Meld Master', text: 'Play 25 melds across your career.' },
-    { key: 'streak_3', title: 'Hat Trick', text: 'Win three matches in a row.' },
-    { key: 'mastery_20', title: 'Hall Regular', text: 'Clear 20 journey mastery stages.' },
-    { key: 'long_game', title: 'Marathon Table', text: 'Play 100 rounds in total (any assists).' },
+    { key: 'first_out', title: N('First Out'), text: N('Win your first round.') },
+    { key: 'meld_master', title: N('Meld Master'), text: N('Play 25 melds across your career.') },
+    { key: 'streak_3', title: N('Hat Trick'), text: N('Win three matches in a row.') },
+    { key: 'mastery_20', title: N('Hall Regular'), text: N('Clear 20 journey mastery stages.') },
+    { key: 'long_game', title: N('Marathon Table'), text: N('Play 100 rounds in total (any assists).') },
   ];
 
   /* ---------- offline validators ---------- */

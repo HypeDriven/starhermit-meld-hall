@@ -51,8 +51,10 @@
     for (const b in this.buses) this.buses[b].gain.value = (this.settings[b] != null ? this.settings[b] : 0.5);
   };
 
+  // Captions are English keys; src/i18n.js (MHI18N.T) translates them when shown.
   Audio.prototype.caption = function (text) {
-    if (this.settings.captions && this.captionListener) this.captionListener(text);
+    const I = globalThis.MHI18N;
+    if (this.settings.captions && this.captionListener) this.captionListener(I ? I.T(text) : text);
   };
   Audio.prototype.onCaption = function (fn) { this.captionListener = fn; };
 

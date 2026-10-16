@@ -13,6 +13,16 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // Localization (src/i18n.js): T() translates an English key; N() only marks one for later T().
+  function T(key, vars) {
+    const I = globalThis.MHI18N;
+    if (I) return I.T(key, vars);
+    return String(key).replace(/\{(\w+)\}/g, function (m, k) { return vars && k in vars ? vars[k] : m; });
+  }
+  function N(key) { return key; }
+  function lang() { return globalThis.MHI18N ? globalThis.MHI18N.lang : 'en-US'; }
+  function shT() { return globalThis.ShStrings.shStrings([lang()]); }
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -69,34 +79,38 @@
     $('daily-date').textContent = d.day;
     const line = $('profile-line');
     if (Platform && Platform.enabled()) {
-      line.textContent = 'Playing as ' + Platform.displayName() + ' — progress ' +
-        Platform.statusText() + '.';
+      line.textContent = T('Playing as {name} — progress {status}.', { name: Platform.displayName(), status: Platform.statusText() });
     } else {
-      line.textContent = 'Guest profile — progress is saved on this device.';
+      line.textContent = T('Guest profile — progress is saved on this device.');
     }
   };
 
   /* ---------- mode select ---------- */
   const MODES = [
-    { id: 'practice', name: 'Practice', desc: 'Custom game vs the hall AI. Undo allowed, unranked.', ranked: false, minutes: '5–10 min' },
-    { id: 'journey', name: 'Journey', desc: 'Forty authored stages, one new idea at a time, mastery every fifth.', ranked: false, minutes: '5–15 min' },
-    { id: 'daily', name: 'Daily', desc: 'One shared seed and ruleset per UTC day. Ranked.', ranked: true, minutes: '10 min' },
-    { id: 'challenge', name: 'Challenge', desc: 'Constrained goals: turn limits, deadwood targets, crowded tables.', ranked: false, minutes: '5–10 min' },
-    { id: 'learn', name: 'Learn', desc: 'Interactive lessons. One rule at a time; you perform each action.', ranked: false, minutes: '2 min' },
+    { id: 'practice', name: N('Practice'), desc: N('Custom game vs the hall AI. Undo allowed, unranked.'), ranked: false, minutes: '5–10' },
+    { id: 'journey', name: N('Journey'), desc: N('Forty authored stages, one new idea at a time, mastery every fifth.'), ranked: false, minutes: '5–15' },
+    { id: 'daily', name: N('Daily'), desc: N('One shared seed and ruleset per UTC day. Ranked.'), ranked: true, minutes: '10' },
+    { id: 'challenge', name: N('Challenge'), desc: N('Constrained goals: turn limits, deadwood targets, crowded tables.'), ranked: false, minutes: '5–10' },
+    { id: 'learn', name: N('Learn'), desc: N('Interactive lessons. One rule at a time; you perform each action.'), ranked: false, minutes: '2' },
   ];
+  function modeDetail(m) {
+    return T(m.desc) + ' ' + T('Expected duration: {minutes} min.', { minutes: m.minutes }) + ' ' +
+      (m.ranked ? T('This result is ranked.') : T('Not ranked.'));
+  }
 
   UI.prototype.showModeSelect = function (preselect) {
     const list = $('mode-list');
     list.innerHTML = '';
     const chSel = $('opt-challenge');
-    if (!chSel.options.length) {
-      for (const c of Content.CHALLENGES) {
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.title;
-        chSel.appendChild(o);
-      }
+    const chosen = chSel.value;
+    chSel.innerHTML = '';
+    for (const c of Content.CHALLENGES) {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = T(c.title);
+      chSel.appendChild(o);
     }
+    if (chosen) chSel.value = chosen;
     const self = this;
     function showOptions(id) {
       $('mode-options').classList.toggle('hidden', id !== 'practice');
@@ -105,21 +119,26 @@
     const modes = MODES.slice();
     for (const m of modes) {
       const b = document.createElement('button');
-      b.textContent = m.name;
+      b.textContent = T(m.name);
+      b.dataset.mode = m.id;
       b.setAttribute('aria-describedby', 'mode-detail');
       b.addEventListener('click', function () {
         self.pendingMode = m.id;
-        $('mode-detail').textContent = m.desc + ' Expected duration: ' + m.minutes + '. ' +
-          (m.ranked ? 'This result is ranked.' : 'Not ranked.');
+        self.modeDetailFull = true;
+        $('mode-detail').textContent = modeDetail(m);
         showOptions(m.id);
         Audio.play('ui');
       });
       list.appendChild(b);
     }
-    this.pendingMode = preselect || 'practice';
-    $('mode-detail').textContent = modes.filter(function (m) { return m.id === self.pendingMode; })[0].desc;
+    if (preselect !== null) {
+      this.pendingMode = preselect || 'practice';
+      this.modeDetailFull = false;
+    }
+    const cur = modes.filter(function (m) { return m.id === self.pendingMode; })[0];
+    $('mode-detail').textContent = this.modeDetailFull ? modeDetail(cur) : T(cur.desc);
     showOptions(this.pendingMode);
-    this.show('mode');
+    if (preselect !== null) this.show('mode');
   };
 
   UI.prototype.startPendingMode = function () {
@@ -163,27 +182,27 @@
     const s = this.session;
     if (!s) return '';
     const st = s.state;
-    if (s.mode === 'learn' && s.contentRef) return s.contentRef.title + ' — ' + s.contentRef.text;
-    if (s.mode === 'challenge' && s.contentRef) return s.contentRef.title + ': ' + s.contentRef.text;
-    return 'Round ' + st.round + ' — first to ' + st.targetScore + ' points wins the match. Go out with an empty hand to win the round.';
+    if (s.mode === 'learn' && s.contentRef) return T(s.contentRef.title) + ' — ' + T(s.contentRef.text);
+    if (s.mode === 'challenge' && s.contentRef) return T(s.contentRef.title) + ': ' + T(s.contentRef.text);
+    return T('Round {round} — first to {target} points wins the match. Go out with an empty hand to win the round.', { round: st.round, target: st.targetScore });
   };
 
   UI.prototype.nameFor = function (p) {
     const s = this.session;
-    return p === (s ? s.humanSeat : 0) ? 'You' : 'Opponent ' + (p + 1);
+    return p === (s ? s.humanSeat : 0) ? T('You') : T('Opponent {n}', { n: p + 1 });
   };
 
   UI.prototype.onSessionEvent = function (evt) {
     const s = this.session;
     if (evt.type === 'invalid') {
       Audio.play('invalid');
-      this.announceError('Action rejected: ' + this.reasonText(evt.reason));
+      this.announceError(T('Action rejected: {reason}', { reason: this.reasonText(evt.reason) }));
       return;
     }
     if (evt.type === 'lessonComplete') {
       this.settings.tutorialSeen[s.contentRef.id] = true;
       Session.saveSettings(this.settings);
-      this.announce('Lesson complete! Finish the round or start the next lesson.');
+      this.announce(T('Lesson complete! Finish the round or start the next lesson.'));
       Audio.play('achievement');
     }
     if (evt.type === 'state') {
@@ -195,7 +214,7 @@
       }
       if (s.state.turn === s.humanSeat && s.state.phase === 'draw' && (!evt.command || evt.command.type === 'discard')) {
         Audio.play('turn');
-        this.announce('Your turn. Draw a card.');
+        this.announce(T('Your turn. Draw a card.'));
       }
       this.selection = this.selection.filter(function (c) {
         return s.state.hands[s.humanSeat].cards.indexOf(c) >= 0;
@@ -215,20 +234,20 @@
 
   UI.prototype.reasonText = function (r) {
     const map = {
-      out_of_turn: 'it is not your turn',
-      not_draw_phase: 'you have already drawn this turn',
-      not_act_phase: 'draw a card first',
-      invalid_meld_shape: 'those cards are not a set or a run',
-      cards_not_in_hand: 'card not in your hand',
-      card_not_in_hand: 'card not in your hand',
-      invalid_layoff: 'that card does not extend the meld',
-      no_such_meld: 'no such meld',
-      deck_empty: 'the deck is empty',
-      discard_empty: 'the discard pile is empty',
-      terminal_roundOver: 'the round has ended',
-      terminal_matchOver: 'the match has ended',
+      out_of_turn: N('it is not your turn'),
+      not_draw_phase: N('you have already drawn this turn'),
+      not_act_phase: N('draw a card first'),
+      invalid_meld_shape: N('those cards are not a set or a run'),
+      cards_not_in_hand: N('card not in your hand'),
+      card_not_in_hand: N('card not in your hand'),
+      invalid_layoff: N('that card does not extend the meld'),
+      no_such_meld: N('no such meld'),
+      deck_empty: N('the deck is empty'),
+      discard_empty: N('the discard pile is empty'),
+      terminal_roundOver: N('the round has ended'),
+      terminal_matchOver: N('the match has ended'),
     };
-    return map[r] || r;
+    return map[r] ? T(map[r]) : r;
   };
 
   /* ---------- rendering sync ---------- */
@@ -239,24 +258,23 @@
     const hand = st.hands[s.humanSeat];
 
     $('hud-objective').textContent = this.objectiveText();
-    $('hud-turn').textContent = st.phase === 'matchOver' ? 'Match over'
-      : st.phase === 'roundOver' ? 'Round over'
-      : st.turn === s.humanSeat ? (st.phase === 'draw' ? 'Your turn — draw' : 'Your turn — meld / discard')
-      : this.nameFor(st.turn) + ' is thinking…';
-    $('hud-deck').textContent = 'Deck: ' + st.deck.length;
-    $('hud-score').textContent = 'You ' + st.scores[s.humanSeat] + ' — best rival ' +
-      Math.max.apply(null, st.scores.filter(function (_, i) { return i !== s.humanSeat; }).concat([0]));
+    $('hud-turn').textContent = st.phase === 'matchOver' ? T('Match over')
+      : st.phase === 'roundOver' ? T('Round over')
+      : st.turn === s.humanSeat ? (st.phase === 'draw' ? T('Your turn — draw') : T('Your turn — meld / discard'))
+      : T('{name} is thinking…', { name: this.nameFor(st.turn) });
+    $('hud-deck').textContent = T('Deck: {n}', { n: st.deck.length });
+    $('hud-score').textContent = T('You {you} — best rival {rival}', { you: st.scores[s.humanSeat],
+      rival: Math.max.apply(null, st.scores.filter(function (_, i) { return i !== s.humanSeat; }).concat([0])) });
     $('rail-objective').textContent = this.objectiveText();
-    $('rail-progress').textContent = 'Round ' + st.round + ' · deadwood in hand: ' + Rules.deadwood(hand) +
-      ' · table melds: ' + st.table.length;
+    $('rail-progress').textContent = T('Round {round} · deadwood in hand: {deadwood} · table melds: {melds}',
+      { round: st.round, deadwood: Rules.deadwood(hand), melds: st.table.length });
 
     // scores rail
     const rs = $('rail-scores');
     rs.innerHTML = '';
     for (let p = 0; p < st.players; ++p) {
       const div = document.createElement('div');
-      div.textContent = this.nameFor(p) + ': ' + st.scores[p] +
-        ' (' + st.hands[p].cards.length + ' cards)';
+      div.textContent = T('{name}: {score} ({cards} cards)', { name: this.nameFor(p), score: st.scores[p], cards: st.hands[p].cards.length });
       if (p === s.humanSeat) div.style.color = 'var(--accent)';
       rs.appendChild(div);
     }
@@ -268,7 +286,7 @@
       const chip = document.createElement('button');
       chip.className = 'meld-chip';
       chip.dataset.meld = i;
-      chip.textContent = (m.kind === 'set' ? 'Set' : 'Run') + ' ' + i + ': ' + m.cards.map(Rules.cardName).join(' ');
+      chip.textContent = (m.kind === 'set' ? T('Set {n}', { n: i }) : T('Run {n}', { n: i })) + ': ' + m.cards.map(Rules.cardName).join(' ');
       md.appendChild(chip);
     });
 
@@ -283,7 +301,7 @@
       b.dataset.card = c;
       b.setAttribute('role', 'option');
       b.setAttribute('aria-selected', self.selection.indexOf(c) >= 0 ? 'true' : 'false');
-      b.setAttribute('aria-label', Rules.cardName(c) + ', value ' + Rules.cardValue(c));
+      b.setAttribute('aria-label', T('{card}, value {value}', { card: Rules.cardName(c), value: Rules.cardValue(c) }));
       b.innerHTML = Rules.RANKS[Rules.rankOf(c)] + '<br>' + Rules.SUIT_GLYPHS[Rules.suitOf(c)];
       hd.appendChild(b);
     });
@@ -336,10 +354,12 @@
       || legal.find(function (x) { return x.type === 'layoff'; })
       || legal[0];
     let msg;
-    if (a.type === 'draw') msg = 'Hint: draw from the ' + a.source + '.';
-    else if (a.type === 'meld') msg = 'Hint: meld ' + a.cards.map(Rules.cardName).join(', ') + ' (' + (Rules.meldKind(a.cards)) + ').';
-    else if (a.type === 'layoff') msg = 'Hint: lay ' + Rules.cardName(a.card) + ' onto meld ' + a.meld + '.';
-    else msg = 'Hint: discard ' + Rules.cardName(a.card) + '.';
+    if (a.type === 'draw') msg = a.source === 'deck' ? T('Hint: draw from the deck.') : T('Hint: draw from the discard pile.');
+    else if (a.type === 'meld') msg = Rules.meldKind(a.cards) === 'set'
+      ? T('Hint: meld {cards} (set).', { cards: a.cards.map(Rules.cardName).join(', ') })
+      : T('Hint: meld {cards} (run).', { cards: a.cards.map(Rules.cardName).join(', ') });
+    else if (a.type === 'layoff') msg = T('Hint: lay {card} onto meld {n}.', { card: Rules.cardName(a.card), n: a.meld });
+    else msg = T('Hint: discard {card}.', { card: Rules.cardName(a.card) });
     this.announce(msg);
     Audio.play('hint');
   };
@@ -356,36 +376,49 @@
   UI.prototype.showResults = function (unlocked) {
     const s = this.session;
     const r = s.resultSummary;
+    this.lastUnlocked = unlocked || [];
+    this.renderResultsText();
+    this.showDailyBoard();
+    this.postToLeaderboard();
+    this.show('results');
+    Audio.play(r.phase === 'matchOver' && r.matchWinner === s.humanSeat ? 'matchWin'
+      : r.humanWon ? 'roundWin' : 'roundLose');
+    this.announce($('results-headline').textContent);
+  };
+
+  // Results text only (no sounds, posting or focus), so a language change re-renders it in place.
+  UI.prototype.renderResultsText = function () {
+    const s = this.session;
+    if (!s || !s.resultSummary) return;
+    const r = s.resultSummary;
     const b = r.breakdown;
-    $('results-h').textContent = r.phase === 'matchOver' ? 'Match over' : 'Round ' + b.round + ' over';
+    const unlocked = this.lastUnlocked;
+    $('results-h').textContent = r.phase === 'matchOver' ? T('Match over') : T('Round {n} over', { n: b.round });
     $('results-headline').textContent = r.humanWon
-      ? 'You took the round! ' + b.pointsAwarded + ' points from deadwood.'
-      : (r.phase === 'matchOver' && r.matchWinner !== s.humanSeat ? this.nameFor(r.matchWinner) + ' wins the match.'
-        : this.nameFor(b.winner) + ' went out and scored ' + b.pointsAwarded + '.');
+      ? T('You took the round! {points} points from deadwood.', { points: b.pointsAwarded })
+      : (r.phase === 'matchOver' && r.matchWinner !== s.humanSeat ? T('{name} wins the match.', { name: this.nameFor(r.matchWinner) })
+        : T('{name} went out and scored {points}.', { name: this.nameFor(b.winner), points: b.pointsAwarded }));
     const tbl = $('results-table');
-    let html = '<tr><th>Player</th><th>Deadwood</th><th>Match score</th></tr>';
+    let html = '<tr><th>' + esc(T('Player')) + '</th><th>' + esc(T('Deadwood')) + '</th><th>' + esc(T('Match score')) + '</th></tr>';
     for (let p = 0; p < s.state.players; ++p) {
       html += '<tr' + (p === s.humanSeat ? ' class="you"' : '') + '><td>' +
         esc(this.nameFor(p)) + (p === b.winner ? ' ★' : '') + '</td><td>' +
         b.deadwood[p] + '</td><td>' + b.totals[p] + ' / ' + s.state.targetScore + '</td></tr>';
     }
-    html += '<tr><td colspan="3" class="muted">Reason: ' + (b.reason === 'player_out' ? 'a player emptied their hand' : 'the deck ran out') +
-      '. Points = sum of opponents\u2019 deadwood' + (b.reason === 'deck_exhausted' ? ' minus winner\u2019s own' : '') + '.</td></tr>';
+    html += '<tr><td colspan="3" class="muted">' + esc(b.reason === 'player_out'
+      ? T('Reason: a player emptied their hand. Points = sum of opponents’ deadwood.')
+      : T('Reason: the deck ran out. Points = sum of opponents’ deadwood minus winner’s own.')) + '</td></tr>';
     tbl.innerHTML = html;
     const ach = $('results-achievements');
     ach.innerHTML = (unlocked && unlocked.length)
       ? unlocked.map(function (k) {
           const a = Content.ACHIEVEMENTS.filter(function (x) { return x.key === k; })[0];
-          return '<p><span class="badge">Achievement</span> <strong>' + a.title + '</strong> — ' + a.text + '</p>';
+          return '<p><span class="badge">' + esc(T('Achievement')) + '</span> <strong>' + esc(T(a.title)) + '</strong> — ' + esc(T(a.text)) + '</p>';
         }).join('')
       : '';
-    this.showDailyBoard();
-    this.postToLeaderboard();
-    $('btn-results-next').textContent = r.phase === 'roundOver' ? 'Next round' : 'Play again';
-    this.show('results');
-    Audio.play(r.phase === 'matchOver' && r.matchWinner === s.humanSeat ? 'matchWin'
-      : r.humanWon ? 'roundWin' : 'roundLose');
-    this.announce($('results-headline').textContent);
+    $('btn-results-next').textContent = r.phase === 'roundOver' ? T('Next round') : T('Play again');
+    this.renderLeaderboardLine();
+    this.renderDailyBoard();
   };
 
   // Signed in only: a finished match (not a lesson) posts the human's match
@@ -397,16 +430,25 @@
     const s = this.session;
     if (!s || !s.resultSummary || s.resultSummary.phase !== 'matchOver' || s.mode === 'learn' ||
       !Platform || !Platform.enabled()) return;
-    const T = globalThis.ShStrings.shStrings(navigator.languages || [navigator.language]);
     line.hidden = false;
-    line.textContent = T.lbPosting;
+    s.lbResult = null;
+    this.renderLeaderboardLine();
     if (!s.lbPost) s.lbPost = Platform.submitScore(s.state.scores[s.humanSeat]);
     const self = this;
     s.lbPost.then(function (r) {
       if (self.session !== s) return;
-      line.textContent = !r.posted ? T.lbNotPosted
-        : r.rank ? T.lbRank.replace('{rank}', r.rank) : T.lbPosted;
+      s.lbResult = r;
+      self.renderLeaderboardLine();
     });
+  };
+  UI.prototype.renderLeaderboardLine = function () {
+    const line = $('results-lb');
+    const s = this.session;
+    if (!line || line.hidden || !s) return;
+    const L = shT();
+    const r = s.lbResult;
+    line.textContent = !r ? L.lbPosting : !r.posted ? L.lbNotPosted
+      : r.rank ? L.lbRank.replace('{rank}', r.rank) : L.lbPosted;
   };
 
   // Daily is the ranked mode: show the shared board read-only when the
@@ -416,36 +458,62 @@
     board.innerHTML = '';
     const s = this.session;
     if (!s || s.mode !== 'daily' || !Platform || !Platform.enabled()) return;
-    board.innerHTML = '<p class="muted">Loading daily board…</p>';
+    this.dailyEntries = undefined;
+    this.renderDailyBoard();
+    const self = this;
     Platform.fetchLeaderboard().then(function (entries) {
-      board.innerHTML = (!entries || !entries.length) ? '' :
-        '<h3>Leaderboard</h3>' +
-        '<table class="score-table"><tr><th>#</th><th>Player</th><th>Score</th></tr>' +
-        entries.map(function (e) {
-          return '<tr><td>' + e.rank + '</td><td>' + esc(e.name) + '</td><td>' + e.score + '</td></tr>';
-        }).join('') + '</table>' +
-        '<p class="muted">Personal bests are kept in your save.</p>';
+      if (self.session !== s) return;
+      self.dailyEntries = entries || null;
+      self.renderDailyBoard();
     });
+  };
+  UI.prototype.renderDailyBoard = function () {
+    const board = $('results-board');
+    const s = this.session;
+    if (!s || s.mode !== 'daily' || !Platform || !Platform.enabled()) return;
+    const entries = this.dailyEntries;
+    if (entries === undefined) { board.innerHTML = '<p class="muted">' + esc(T('Loading daily board…')) + '</p>'; return; }
+    board.innerHTML = (!entries || !entries.length) ? '' :
+      '<h3>' + esc(T('Leaderboard')) + '</h3>' +
+      '<table class="score-table"><tr><th>#</th><th>' + esc(T('Player')) + '</th><th>' + esc(T('Score')) + '</th></tr>' +
+      entries.map(function (e) {
+        return '<tr><td>' + e.rank + '</td><td>' + esc(e.name) + '</td><td>' + e.score + '</td></tr>';
+      }).join('') + '</table>' +
+      '<p class="muted">' + esc(T('Personal bests are kept in your save.')) + '</p>';
   };
 
   /* ---------- help ---------- */
   UI.prototype.showHelp = function (from) {
     this.helpReturn = from || 'title';
+    this.renderHelp();
+    this.show('help');
+  };
+  UI.prototype.renderHelp = function () {
+    const card = function (title, body) { return '<div class="panel"><h3>' + esc(title) + '</h3><p>' + body + '</p></div>'; };
     $('help-rules').innerHTML =
       '<div class="menu-grid">' +
-      '<div class="panel"><h3>Draw</h3><p>Start each turn by taking the deck top card or the face-up discard.</p></div>' +
-      '<div class="panel"><h3>Meld</h3><p>A <strong>set</strong> is 3–4 cards of one rank. A <strong>run</strong> is 3+ consecutive cards of one suit. Melded cards leave your hand and score safety.</p></div>' +
-      '<div class="panel"><h3>Lay off</h3><p>Extend any table meld with a matching card from your hand.</p></div>' +
-      '<div class="panel"><h3>Discard &amp; deadwood</h3><p>End your turn with one discard. When a player empties their hand, everyone else\u2019s remaining cards (deadwood) become the winner\u2019s points.</p></div>' +
+      card(T('Draw'), esc(T('Start each turn by taking the deck top card or the face-up discard.'))) +
+      card(T('Meld'), T('A <strong>set</strong> is 3–4 cards of one rank. A <strong>run</strong> is 3+ consecutive cards of one suit. Melded cards leave your hand and score safety.')) +
+      card(T('Lay off'), esc(T('Extend any table meld with a matching card from your hand.'))) +
+      card(T('Discard & deadwood'), esc(T('End your turn with one discard. When a player empties their hand, everyone else’s remaining cards (deadwood) become the winner’s points.'))) +
       '</div>';
     const k = this.keyText.bind(this);
+    const li = function (text) { return '<li>' + esc(text) + '</li>'; };
     $('help-controls').innerHTML = '<ul>' +
-      '<li>Move between cards: ' + k('left') + ' ' + k('right') + '</li>' +
-      '<li>Select card: ' + k('confirm') + ' · Draw deck: ' + k('drawDeck') + ' · Take discard: ' + k('drawDiscard') + '</li>' +
-      '<li>Meld selection: ' + k('meld') + ' · Lay off: ' + k('layoff') + ' · Discard: ' + k('discard') + '</li>' +
-      '<li>Undo (practice): ' + k('undo') + ' · Hint: ' + k('hint') + ' · Pause: ' + k('pause') + ' · Camera reset: ' + k('cameraReset') + ' · Cancel: ' + k('cancel') + '</li>' +
-      '<li>Pointer/touch: tap cards to select, tap deck or discard pile to draw, tap a meld marker to lay off.</li></ul>';
-    this.show('help');
+      li(T('Move between cards: {keys}', { keys: k('left') + ' ' + k('right') })) +
+      li(T('Select card: {select} · Draw deck: {deck} · Take discard: {discard}', { select: k('confirm'), deck: k('drawDeck'), discard: k('drawDiscard') })) +
+      li(T('Meld selection: {meld} · Lay off: {layoff} · Discard: {discard}', { meld: k('meld'), layoff: k('layoff'), discard: k('discard') })) +
+      li(T('Undo (practice): {undo} · Hint: {hint} · Pause: {pause} · Camera reset: {camera} · Cancel: {cancel}', { undo: k('undo'), hint: k('hint'), pause: k('pause'), camera: k('cameraReset'), cancel: k('cancel') })) +
+      li(T('Pointer/touch: tap cards to select, tap deck or discard pile to draw, tap a meld marker to lay off.')) + '</ul>';
+  };
+
+  /* ---------- language: re-render everything built in code (src/i18n.js re-applies the markup) ---------- */
+  UI.prototype.onLanguage = function () {
+    this.refreshTitle();
+    if (this.currentScreen === 'mode') this.showModeSelect(null);
+    if (this.session) this.syncAll();
+    if (this.currentScreen === 'results') this.renderResultsText();
+    if (this.currentScreen === 'help') this.renderHelp();
   };
 
   /* ---------- settings ---------- */
@@ -627,6 +695,7 @@
     });
 
     document.addEventListener('keydown', function (e) { self.onKey(e); });
+    document.addEventListener('mh-language', function () { self.onLanguage(); });
   };
 
   UI.prototype.replayLast = function () {
@@ -635,7 +704,7 @@
     if (!s.resultSummary.replay) return;
     const env = s.resultSummary.replay;
     const v = Rules.verifyReplay(env);
-    this.announce(v.ok ? 'Replay verified: identical final state.' : 'Replay mismatch: ' + v.reason);
+    this.announce(v.ok ? T('Replay verified: identical final state.') : T('Replay mismatch: {reason}', { reason: v.reason }));
   };
 
   return new UI();

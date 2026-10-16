@@ -4,8 +4,10 @@
  * (window.StarHermit from starhermit-sdk.js, loaded first). The SDK owns the
  * launch token (+ renewal), sign-in, profiles, the game:<slug> cloud-save
  * slot, the settings KV and key bindings; this module keeps Meld Hall's API:
- * cloud save (remote-preferred, localStorage stays the offline cache),
- * settings mirroring, read-only leaderboard and a small sync status.
+ * cloud save (local and cloud progress merged, localStorage stays the
+ * offline cache; a write that loses to another device's save is reloaded,
+ * merged and saved again), settings mirroring, read-only leaderboard and a
+ * small sync status.
  * UMD: loads in Node for tests (pass an SDK instance to boot()).
  */
 (function (root, factory) {
@@ -13,6 +15,13 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.MeldPlatform = api;
 })(typeof self !== 'undefined' ? self : globalThis, function () {
+
+  // Localization (src/i18n.js, browser only): T() translates an English key.
+  function T(key, vars) {
+    const I = typeof globalThis !== 'undefined' ? globalThis.MHI18N : null;
+    if (I) return I.T(key, vars);
+    return String(key).replace(/\{(\w+)\}/g, function (m, k) { return vars && k in vars ? vars[k] : m; });
+  }
 
   let sh = null;             // SDK instance (globalThis.StarHermit unless injected)
   let nickname = null;       // account nickname (never username)
@@ -29,17 +38,17 @@
   function setStatus(s) { if (s !== syncStatus) { syncStatus = s; notify(); } }
   function statusText() {
     switch (syncStatus) {
-      case 'syncing': return 'syncing…';
-      case 'saving': return 'saving…';
-      case 'offline': return 'offline — saved on this device';
-      case 'synced': return 'synced to your account';
-      default: return 'saved on this device';
+      case 'syncing': return T('syncing…');
+      case 'saving': return T('saving…');
+      case 'offline': return T('offline — saved on this device');
+      case 'synced': return T('synced to your account');
+      default: return T('saved on this device');
     }
   }
   function displayName() {
     if (nickname) return nickname;
-    if (enabled()) return 'Player ' + String(sh.userId).slice(0, 6);
-    return 'Player';
+    if (enabled()) return T('Player {id}', { id: String(sh.userId).slice(0, 6) });
+    return T('Player');
   }
   function loadProfile() {
     sh.profile().then(function (p) {
@@ -51,16 +60,56 @@
   // Profile nickname for an arbitrary user id (leaderboard rows).
   function profileName(userId) {
     const id = String(userId || '');
-    if (!id || !enabled()) return Promise.resolve('Player');
+    if (!id || !enabled()) return Promise.resolve(T('Player'));
     return sh.profile(id).then(function (p) {
-      return p ? String(p.displayName).slice(0, 24) : 'Player ' + id.slice(0, 6);
+      return p ? String(p.displayName).slice(0, 24) : T('Player {id}', { id: id.slice(0, 6) });
     });
   }
 
   /* ---------- cloud save (game:<slug> slot; localStorage stays the cache) ---------- */
   let rawSave = null; // original Session.saveProgress, captured before wrapping
-  function mergeProgress(Session, data) {
-    return Object.assign(JSON.parse(JSON.stringify(Session.DEFAULT_PROGRESS)), data || {});
+  let session = null; // the Session module passed to boot()
+  function num(x) { return typeof x === 'number' && isFinite(x) ? x : 0; }
+  function union(a, b) { return Object.assign({}, b || {}, a || {}); }
+  // Merge two progress documents (this device's and the cloud's) so neither
+  // side's progress is lost: the further journey unlock, union of cleared
+  // stages / dailies / achievements, the larger career counters.
+  function mergeProgress(Session, local, remote) {
+    const base = JSON.parse(JSON.stringify(Session.DEFAULT_PROGRESS));
+    const a = Object.assign({}, base, local || {});
+    const b = Object.assign({}, base, remote || {});
+    const ca = Object.assign({}, base.career, a.career || {});
+    const cb = Object.assign({}, base.career, b.career || {});
+    return Object.assign({}, b, a, {
+      journeyUnlocked: Math.max(num(a.journeyUnlocked) || 1, num(b.journeyUnlocked) || 1),
+      journeyCleared: union(a.journeyCleared, b.journeyCleared),
+      masteryCleared: Math.max(num(a.masteryCleared), num(b.masteryCleared)),
+      dailiesPlayed: union(a.dailiesPlayed, b.dailiesPlayed),
+      achievements: union(a.achievements, b.achievements),
+      career: {
+        melds: Math.max(num(ca.melds), num(cb.melds)),
+        rounds: Math.max(num(ca.rounds), num(cb.rounds)),
+        winStreak: Math.max(num(ca.winStreak), num(cb.winStreak)),
+        bestStreak: Math.max(num(ca.bestStreak), num(cb.bestStreak)),
+      },
+      lastDailySeed: a.lastDailySeed || b.lastDailySeed || null,
+    });
+  }
+  function localProgress(Session) {
+    return typeof Session.loadProgress === 'function' ? Session.loadProgress() : null;
+  }
+  // Another device saved since our last load (the SDK refused our write):
+  // reload the cloud copy, merge it with this device's progress, save the merge.
+  function resolveConflict() {
+    if (!enabled() || !session) return Promise.resolve(false);
+    setStatus('syncing');
+    return sh.loadJSON().then(function (remote) {
+      const merged = mergeProgress(session, localProgress(session), remote);
+      (rawSave || session.saveProgress)(merged);
+      notify();
+      if (!sh.saveConflicted()) { setStatus('saving'); sh.saveJSON(merged, 0); }
+      return true;
+    });
   }
 
   /* ---------- settings KV (changed keys only; key bindings travel via controls) ---------- */
@@ -130,13 +179,22 @@
     }
   }
 
-  // Remote-preferred load: a present remote doc wins and reseeds the local
-  // cache; absent keeps the local progress untouched.
+  // Boot load: a present cloud doc is merged with this device's progress and
+  // reseeds the local cache (the merge is saved back when it adds anything);
+  // absent keeps the local progress untouched.
   function initCloud(Session) {
     if (!enabled()) return Promise.resolve(false);
     setStatus('syncing');
     return sh.loadJSON().then(function (data) {
-      if (data) (rawSave || Session.saveProgress)(mergeProgress(Session, data));
+      if (data) {
+        const merged = mergeProgress(Session, localProgress(Session), data);
+        (rawSave || Session.saveProgress)(merged);
+        if (JSON.stringify(merged) !== JSON.stringify(mergeProgress(Session, null, data))) {
+          setStatus('saving');
+          sh.saveJSON(merged, 0);
+          return true;
+        }
+      }
       setStatus('synced');
       return !!data;
     });
@@ -182,6 +240,8 @@
     if (!sh) return false;
     sh.init();
     sh.on('saved', function (ok) { setStatus(ok ? 'synced' : 'offline'); });
+    sh.on('saveconflict', function () { resolveConflict(); });
+    session = Session || null;
     sh.on('auth', function (a) {
       if (!a.signedIn) { nickname = null; setStatus('local'); }
       for (const fn of authListeners) { try { fn(a); } catch (_) {} }
@@ -203,6 +263,8 @@
     onSync: onSync,
     onAuth: onAuth,
     initCloud: initCloud,
+    resolveConflict: resolveConflict,
+    mergeProgress: mergeProgress,
     flushCloud: function () { return enabled() ? sh.flushSave(true) : Promise.resolve(false); },
     loadSettings: loadSettings,
     flushSettings: flushSettings,

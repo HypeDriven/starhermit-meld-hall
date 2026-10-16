@@ -11,6 +11,9 @@
 <script src="ui-scale.js"></script>
 <script src="browser-guard.js"></script>
 <script src="starhermit-sdk.js"></script>
+<script src="sh-language.js"></script>
+<script src="./src/strings.js"></script>
+<script src="./src/i18n.js"></script>
 </head>
 <body>
 <div id="app">
@@ -19,7 +22,7 @@
   <!-- Title / home -->
   <section id="screen-title" class="screen active" aria-labelledby="title-h">
     <div class="panel" style="margin:auto;text-align:center">
-      <h1 id="title-h">Meld Hall</h1>
+      <h1 id="title-h" data-i18n-skip>Meld Hall</h1>
       <p class="muted">Draw, meld sets and runs, lay off, discard — keep your deadwood low.</p>
       <div class="menu-grid" style="margin-top:16px">
         <button id="btn-play" class="primary">Play</button>
@@ -28,8 +31,8 @@
         <button id="btn-learn">Learn</button>
         <button id="btn-help">How to Play</button>
         <button id="btn-settings">Settings</button>
-        <button id="btn-signin" class="hidden">Sign in with StarHermit</button>
-        <button id="btn-invite" class="hidden">Invite a friend</button>
+        <button id="btn-signin" class="hidden" data-i18n-skip>Sign in with StarHermit</button>
+        <button id="btn-invite" class="hidden" data-i18n-skip>Invite a friend</button>
       </div>
       <p class="muted" id="profile-line" style="margin-top:14px">Guest profile — progress is saved on this device.</p>
     </div>
@@ -64,7 +67,7 @@
   <section id="screen-play" class="screen" aria-label="Game table">
     <div id="hud-top">
       <div class="group">
-        <strong id="hud-objective">Objective</strong>
+        <strong id="hud-objective" data-i18n-skip></strong>
         <span id="hud-turn" class="badge">—</span>
         <span id="hud-deck" class="badge" title="Cards left in deck"></span>
       </div>
@@ -173,7 +176,7 @@
             <select id="set-palette"><option value="default">Default</option><option value="deuteranopia">Deuteranopia-safe</option><option value="protanopia">Protanopia-safe</option><option value="tritanopia">Tritanopia-safe</option></select></div>
         </div>
       </div>
-      <section id="gfx-section" aria-labelledby="gfx-h">
+      <section id="gfx-section" aria-labelledby="gfx-h" data-i18n-skip>
         <h3 id="gfx-h">Graphics</h3>
         <div class="field"><label for="set-quality">Quality</label>
           <select id="set-quality"><option value="auto">Auto</option><option value="low">Low</option><option value="balanced">Balanced</option><option value="high">High</option><option value="ultra">Ultra</option></select></div>

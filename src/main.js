@@ -245,7 +245,7 @@
   UI.bindSettings(settings, function (key) { track('settings_change', key); });
   const gfxPanel = GfxUI.mount({
     settings: settings,
-    locale: (navigator.languages && navigator.languages[0]) || navigator.language,
+    locale: window.MHI18N ? window.MHI18N.lang : ((navigator.languages && navigator.languages[0]) || navigator.language),
     save: function () { Session.saveSettings(settings); },
     onChange: function () { applyGraphics(); track('settings_change', 'graphics'); Audio.play('ui'); },
     info: gfxInfo,
@@ -257,11 +257,14 @@
   }, 1000);
   document.getElementById('btn-settings').addEventListener('click', function () { if (gfxPanel) gfxPanel.refresh(); });
   document.getElementById('btn-pause-settings').addEventListener('click', function () { if (gfxPanel) gfxPanel.refresh(); });
+  // Settings → Language: the Graphics box relabels itself in the new language.
+  document.addEventListener('mh-language', function (e) { if (gfxPanel) gfxPanel.setLocale(e.detail.lang); });
 
   /* StarHermit platform: launch token (fragment read once + stripped),
      identity, cloud-save mirror, sync status. */
   if (Platform) {
-    const shT = window.ShStrings.shStrings(navigator.languages || [navigator.language]);
+    // Account strings in the game's current language (src/i18n.js).
+    const shT = function () { return window.ShStrings.shStrings([window.MHI18N ? window.MHI18N.lang : navigator.language]); };
     let toastTimer = null;
     const toast = function (text) {
       const el = document.getElementById('sh-toast');
@@ -275,8 +278,12 @@
       document.getElementById('btn-signin').classList.toggle('hidden', !Platform.canSignIn());
       document.getElementById('btn-invite').classList.toggle('hidden', !Platform.enabled());
     };
-    document.getElementById('btn-signin').textContent = shT.signIn;
-    document.getElementById('btn-invite').textContent = shT.invite;
+    const labelAccount = function () {
+      document.getElementById('btn-signin').textContent = shT().signIn;
+      document.getElementById('btn-invite').textContent = shT().invite;
+    };
+    labelAccount();
+    document.addEventListener('mh-language', labelAccount);
     document.getElementById('btn-signin').addEventListener('click', function () { Platform.signIn(); });
     document.getElementById('btn-invite').addEventListener('click', function () {
       const link = Platform.inviteLink();
@@ -285,7 +292,7 @@
       // navigator.clipboard is undefined outside secure contexts: report it instead of throwing
       const clip = navigator.clipboard && navigator.clipboard.writeText
         ? navigator.clipboard.writeText(link) : Promise.reject(new Error('clipboard unavailable'));
-      clip.then(function () { toast(shT.copied); }, function () { toast(shT.copyFailed); });
+      clip.then(function () { toast(shT().copied); }, function () { toast(shT().copyFailed); });
     });
     Platform.boot(Session);
     refreshAccount();
@@ -293,7 +300,7 @@
     Platform.onAuth(function (a) {
       refreshAccount();
       UI.refreshTitle();
-      if (!a.signedIn) toast(shT.signedOut); // keep playing locally
+      if (!a.signedIn) toast(shT().signedOut); // keep playing locally
     });
     Platform.initCloud(Session).then(function (mergedRemote) {
       if (mergedRemote) UI.refreshTitle(); // remote progress reseeded the cache

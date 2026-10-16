@@ -4,7 +4,7 @@
   "description": "Meld Hall — an elegant hall-table card game of sets, runs, and low deadwood.",
   "main": "server.js",
   "scripts": {
-    "test": "node tests/run.js",
+    "test": "node tests/run.js && node --test tests/i18n.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "start": "node server.js"
   },

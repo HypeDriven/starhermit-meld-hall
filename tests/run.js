@@ -462,6 +462,7 @@ function shFixture(href) {
   };
   const calls = [];
   let slot = null;
+  let version = 0; // the slot's ETag is "v<version>"; writes are conditional on it
   const kv = { music: 0.25 };
   const res = (status, body, bytes) => ({
     ok: status >= 200 && status < 300, status,
@@ -472,10 +473,21 @@ function shFixture(href) {
     init = init || {};
     const method = init.method || 'GET';
     const body = init.body ? JSON.parse(init.body) : undefined;
-    calls.push({ url, method, body, auth: (init.headers || {}).Authorization });
+    const headers = init.headers || {};
+    calls.push({ url, method, body, auth: headers.Authorization, ifMatch: headers['If-Match'] });
     if (url === '/api/v1/users/' + SH_USER + '/profile') return res(200, { nickname: 'Card Shark', username: 'hidden' });
+    if (url === '/api/v1/me/cloud-saves/game%3Ameld-hall/info') {
+      return res(200, slot ? { exists: true, etag: '"v' + version + '"' } : { exists: false });
+    }
     if (url === '/api/v1/me/cloud-saves/game%3Ameld-hall') {
-      if (method === 'PUT') { slot = new Uint8Array(Buffer.from(body.dataBase64, 'base64')); return res(204); }
+      if (method === 'PUT') {
+        const cur = slot ? '"v' + version + '"' : null;
+        if (headers['If-Match'] && headers['If-Match'] !== cur) return res(412, { error: 'precondition failed', etag: cur });
+        if (headers['If-None-Match'] === '*' && slot) return res(412, { error: 'precondition failed', etag: cur });
+        slot = new Uint8Array(Buffer.from(body.dataBase64, 'base64'));
+        version++;
+        return res(200, { etag: '"v' + version + '"' });
+      }
       return slot ? res(200, null, slot) : res(404);
     }
     if (url === '/api/v1/games/meld-hall/settings') {
@@ -492,10 +504,13 @@ function shFixture(href) {
   const FakeSession = {
     DEFAULT_PROGRESS: Session.DEFAULT_PROGRESS,
     DEFAULT_SETTINGS: Session.DEFAULT_SETTINGS,
+    loadProgress() { return Object.assign(JSON.parse(JSON.stringify(Session.DEFAULT_PROGRESS)), store.progress || {}); },
     saveProgress(p) { store.progress = JSON.parse(JSON.stringify(p)); },
     saveSettings(s) { store.settings = JSON.parse(JSON.stringify(s)); },
   };
-  return { sh, win, calls, kv, store, FakeSession };
+  // Another device writes the slot (bumps the version behind this client's back).
+  const writeElsewhere = (doc) => { slot = new Uint8Array(zipStored(JSON.stringify(doc))); version++; };
+  return { sh, win, calls, kv, store, FakeSession, writeElsewhere };
 }
 const tick = () => new Promise((r) => setImmediate(r));
 const asyncTests = [];
@@ -550,12 +565,73 @@ atest('platform: standalone makes no fetch; sign-in only on the platform host', 
   assert.strictEqual(P.canSignIn(), false);
   assert.strictEqual(P.inviteLink(), null);
   assert.strictEqual(f.calls.length, 0);
-  const g = shFixture('https://meld-hall.starhermit.com/');
+  const g = shFixture('https://0b9d6f2e-3c4a-4e5b-9a7c-1d2e3f405162.starhermit.com/');
   const Q = freshPlatform();
   Q.boot(g.FakeSession, g.sh);
   assert.strictEqual(Q.canSignIn(), true);
   assert.strictEqual(g.calls.length, 0);
 });
+
+atest('platform: boot load merges cloud and local progress instead of replacing it', async function () {
+  const f = shFixture('https://x.example/#game_token={jwt}');
+  const P = freshPlatform();
+  P.boot(f.FakeSession, f.sh);
+  f.writeElsewhere({ journeyUnlocked: 6, journeyCleared: { stage_01: true }, achievements: { first_out: true }, career: { melds: 10, rounds: 20, winStreak: 0, bestStreak: 2 } });
+  f.store.progress = { journeyUnlocked: 3, journeyCleared: { stage_02: true }, achievements: { meld_master: true }, career: { melds: 30, rounds: 5, winStreak: 1, bestStreak: 1 } };
+  assert.strictEqual(await P.initCloud(f.FakeSession), true);
+  const p = f.store.progress;
+  assert.strictEqual(p.journeyUnlocked, 6);
+  assert.deepStrictEqual(Object.keys(p.journeyCleared).sort(), ['stage_01', 'stage_02']);
+  assert.deepStrictEqual(Object.keys(p.achievements).sort(), ['first_out', 'meld_master']);
+  assert.deepStrictEqual(p.career, { melds: 30, rounds: 20, winStreak: 1, bestStreak: 2 });
+  await new Promise((r) => setTimeout(r, 30)); // the merge save is debounced (0 ms)
+  for (let i = 0; i < 4; i++) await tick();
+  const put = f.calls.filter((c) => c.method === 'PUT').pop(); // the merge is written back, conditionally
+  assert.strictEqual(put.ifMatch, '"v1"');
+});
+
+atest('platform: save conflict reloads, merges and saves again', async function () {
+  const f = shFixture('https://x.example/#game_token={jwt}');
+  const P = freshPlatform();
+  P.boot(f.FakeSession, f.sh);
+  await P.initCloud(f.FakeSession); // empty slot
+  f.FakeSession.saveProgress({ journeyUnlocked: 4, achievements: { first_out: true } });
+  await P.flushCloud();
+  assert.strictEqual(P.statusText(), 'synced to your account');
+  f.writeElsewhere({ journeyUnlocked: 9, achievements: { streak_3: true } }); // another device
+  let conflicts = 0;
+  f.sh.on('saveconflict', function () { conflicts++; });
+  f.FakeSession.saveProgress(Object.assign(f.FakeSession.loadProgress(), { masteryCleared: 2 }));
+  await P.flushCloud();
+  for (let i = 0; i < 10; i++) await tick();
+  assert.strictEqual(conflicts, 1);
+  const p = f.store.progress;
+  assert.strictEqual(p.journeyUnlocked, 9);
+  assert.strictEqual(p.masteryCleared, 2);
+  assert.deepStrictEqual(Object.keys(p.achievements).sort(), ['first_out', 'streak_3']);
+  await P.flushCloud();
+  for (let i = 0; i < 4; i++) await tick();
+  const put = f.calls.filter((c) => c.method === 'PUT').pop();
+  assert.strictEqual(put.ifMatch, '"v2"');
+  assert.strictEqual(f.sh.saveConflicted(), false);
+  assert.strictEqual(P.statusText(), 'synced to your account');
+});
+
+/* A minimal stored (uncompressed) zip with one save.json entry, as the platform serves it. */
+function zipStored(text) {
+  const data = Buffer.from(text, 'utf8');
+  const name = Buffer.from('save.json');
+  let c = ~0;
+  for (const b of data) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); }
+  const crc = (~c) >>> 0;
+  const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4);
+  local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(name.length, 26);
+  const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+  central.writeUInt32LE(crc, 16); central.writeUInt32LE(data.length, 20); central.writeUInt32LE(data.length, 24); central.writeUInt16LE(name.length, 28);
+  const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(central.length + name.length, 12); end.writeUInt32LE(local.length + name.length + data.length, 16);
+  return Buffer.concat([local, name, data, central, name, end]);
+}
 
 (async function () {
   for (const [name, fn] of asyncTests) {
