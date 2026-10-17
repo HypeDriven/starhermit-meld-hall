@@ -384,15 +384,42 @@ test('progression: achievements are idempotent', function () {
 /* ---------- graphics quality model (src/gfx.js) ---------- */
 const Gfx = require('../src/gfx.js');
 const GfxUI = require('../src/gfx-ui.js');
-test('gfx: detectPreset maps GPU strings to tiers', function () {
-  assert.strictEqual(Gfx.detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)'), 'low');
-  assert.strictEqual(Gfx.detectPreset('llvmpipe (LLVM 15.0.7, 256 bits)'), 'low');
-  assert.strictEqual(Gfx.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Direct3D11 vs_5_0 ps_5_0)'), 'high');
-  assert.strictEqual(Gfx.detectPreset('Apple M2'), 'high');
-  assert.strictEqual(Gfx.detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)'), 'balanced');
-  assert.strictEqual(Gfx.detectPreset('Adreno (TM) 640'), 'balanced');
-  assert.strictEqual(Gfx.detectPreset(''), 'balanced');
-  assert.strictEqual(Gfx.detectPreset('Apple M2', { mobile: true }), 'balanced'); // mobile caps Auto
+const DESK = { cores: 8, memoryGb: 8 }, PHONE = { mobile: true, cores: 8, memoryGb: 8 };
+test('gfx: hardware level picks the Auto preset (Low 0, Balanced 4, High 10, Ultra 17)', function () {
+  assert.strictEqual(Gfx.detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', DESK), 'low');
+  assert.strictEqual(Gfx.detectLevel('llvmpipe (LLVM 15.0.7, 256 bits)', DESK), 0);
+  assert.strictEqual(Gfx.detectPreset('', DESK), 'low'); // no WebGL
+  assert.strictEqual(Gfx.detectPreset('ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)', DESK), 'low');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)', DESK), 'low');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)', DESK), 'balanced');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce GTX 1070 Direct3D11 vs_5_0 ps_5_0)', DESK), 'high');
+  assert.strictEqual(Gfx.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 Direct3D11 vs_5_0 ps_5_0)', DESK), 'ultra');
+  assert.strictEqual(Gfx.detectLevel('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', DESK), 20);
+  assert.strictEqual(Gfx.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', DESK), 'ultra');
+  for (const p in Gfx.LEVELS) assert.strictEqual(Gfx.presetForLevel(Gfx.LEVELS[p]), p);
+  assert.strictEqual(Gfx.presetForLevel(3), 'low');
+  assert.strictEqual(Gfx.presetForLevel(16), 'high');
+});
+test('gfx: phones and tablets are Balanced at most; software GPUs stay Low', function () {
+  assert.strictEqual(Gfx.detectPreset('Adreno (TM) 740', PHONE), 'balanced');
+  assert.ok(Gfx.detectLevel('Adreno (TM) 740', PHONE) <= 9);
+  assert.strictEqual(Gfx.detectPreset('Apple M2', PHONE), 'balanced');
+  assert.strictEqual(Gfx.detectPreset('SwiftShader', PHONE), 'low');
+});
+test('gfx: per-preset budgets are explicit, grow from Low to Ultra and scale with the level', function () {
+  const P = Gfx.PRESETS, B = Gfx.BUDGETS;
+  const keys = ['material', 'texture', 'segments', 'motes', 'burst', 'bloomRes'];
+  for (const p of P) for (const k of keys) assert.ok(B[p][k] != null, p + '.' + k);
+  for (let i = 1; i < P.length; i++) for (const k of keys) {
+    if (typeof B.low[k] === 'number') assert.ok(B[P[i]][k] >= B[P[i - 1]][k], P[i] + '.' + k);
+  }
+  assert.deepStrictEqual(P.map(function (p) { return B[p].material; }), ['lambert', 'standard', 'physical', 'physical']);
+  assert.deepStrictEqual(P.map(function (p) { return B[p].bloomRes; }), [0.5, 0.5, 0.5, 1]);
+  assert.deepStrictEqual(Gfx.resolve({ preset: 'high' }, 'low', 10).budget, B.high); // floor level = tuned budget
+  assert.deepStrictEqual(Gfx.resolve({ preset: 'ultra' }, 'low', 0).budget, Gfx.resolve({ preset: 'ultra' }, 'ultra', 17).budget);
+  assert.ok(Gfx.budgetFor('balanced', 9).motes > Gfx.budgetFor('balanced', 4).motes); // scales within the preset
+  assert.ok(Gfx.budgetFor('ultra', 20).motes <= Gfx.MOTE_MAX);
+  assert.strictEqual(Gfx.resolve({}, 'low', 0).budget.material, 'lambert'); // headless SwiftShader
 });
 test('gfx: resolve applies preset, overrides and clamps render scale', function () {
   const auto = Gfx.resolve({}, 'low');

@@ -96,8 +96,19 @@
   const gpuName = shortGpu(gpuRaw);
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
     ((navigator.maxTouchPoints || 0) > 0 && !!window.matchMedia && matchMedia('(pointer: coarse)').matches);
-  const detected = Gfx.detectPreset(gpuRaw, { mobile: isMobile });
-  function gfxResolved() { return Gfx.resolve(UI.settings && UI.settings.graphics, detected); }
+  // StarHermit hardware level (src/gpu-level.js): renderer string + device facts (phone/tablet, cores, memory).
+  const gpuLevel = (function () {
+    let sys = { mobile: isMobile };
+    try {
+      if (window.StarHermitGpu) {
+        const d = window.StarHermitGpu.detectSystem();
+        sys = { mobile: isMobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, webgl2: d.webgl2, astc: d.astc };
+      }
+    } catch (_) { /* defaults */ }
+    return Gfx.detectLevel(gpuRaw, sys);
+  })();
+  const detected = Gfx.presetForLevel(gpuLevel);
+  function gfxResolved() { return Gfx.resolve(UI.settings && UI.settings.graphics, detected, gpuLevel); }
   function gfxInfo() {
     const r = gfxResolved();
     let pixels;
@@ -106,7 +117,7 @@
       const k = Math.min(window.devicePixelRatio || 1, r.maxRatio) * r.scale;
       pixels = [Math.round(window.innerWidth * k), Math.round(window.innerHeight * k)];
     }
-    return { gpu: gpuName, detected: detected, resolved: r, pixels: pixels,
+    return { gpu: gpuName, level: gpuLevel, detected: detected, resolved: r, pixels: pixels,
       postFailed: !!(scene3d && scene3d.postFailed), fps: scene3d ? Math.round(scene3d.fps) : 0 };
   }
   window.MeldGfxInfo = gfxInfo; // read by the Graphics panel (and e2e checks)

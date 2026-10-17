@@ -277,6 +277,7 @@ async function playthrough(browser, tag, viewport, touch, maxRounds) {
       await page.selectOption('#gfx-cat-shadows', 'off');
       const sum = await page.textContent('#gfx-summary');
       if (!/no shadows/.test(sum) || !/px/.test(sum)) throw new Error(`summary: ${sum}`);
+      if (!/ · Level 0 · /.test(sum)) throw new Error(`summary lacks the hardware level: ${sum}`);
       await page.screenshot({ path: SHOT('graphics', tag) });
       // the panel must fit: every control reachable inside the viewport width
       const overflow = await page.evaluate(() => {

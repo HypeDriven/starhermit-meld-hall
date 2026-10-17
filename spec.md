@@ -35,7 +35,8 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/i18n.js` | `MHI18N`: `T()`, live locale switching through `sh-language.js`, static-markup translation, `mh-language` event |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
 | `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
-| `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, GPU detection, `resolve()`, `presetTier()`, `describe()` |
+| `src/gpu-level.js` | Shared StarHermit hardware-level module (`StarHermitGpu`, loaded before `src/gfx.js`), copied from the platform tools, never edited here |
+| `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, hardware-level detection (`detectLevel`, `presetForLevel`, `detectPreset`), per-preset `BUDGETS`/`budgetFor`, `resolve()`, `presetTier()`, `describe()` |
 | `src/gfx-ui.js` | `MeldGfxUI`: the Settings overlay's Graphics section — builds and binds the controls, localized strings (9 locales, relabelled live by `setLocale`), cost summary |
 | `src/render.js` | `MeldRender`: the 3D hall, procedural card/table textures, picking, particles, graphics settings, post-processing chain, adaptive resolution |
 | `src/ui.js` | `MeldUI`: screens, focus, keyboard, live regions, settings binding, the accessible hand list |
@@ -46,7 +47,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/three.module.js` | Three.js r170 ES module, vendored but not loaded |
 | `score-script.js` | StarHermit platform script (`server=`): range-checks a finished match total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
 | `server.js` | Local static server; its legacy time/health endpoints and `/ws` hosted sessions are no longer called by the client |
-| `tests/run.js` | 60 offline tests: rules, scoring, fuzzing, replay determinism, content validation, the StarHermit adapter over the real SDK with a stubbed, ETag-versioned fetch (boot merge, save conflict), graphics model and panel locales |
+| `tests/run.js` | 62 offline tests: rules, scoring, fuzzing, replay determinism, content validation, the StarHermit adapter over the real SDK with a stubbed, ETag-versioned fetch (boot merge, save conflict), graphics model and panel locales |
 | `tests/i18n.test.mjs` | 4 `node --test` tests: every key used in markup and code exists in all nine locales, content texts, live switching, Graphics/account strings |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
@@ -371,9 +372,7 @@ it, so Low renders straight to the canvas, and if it cannot be built the table r
 and the panel says so.
 
 The Settings overlay's **Graphics** section offers: Quality (`#set-quality`: Auto (detected:
-<tier>), Low, Balanced, High, Ultra) — Auto comes from the unmasked WebGL renderer string, where
-software renderers (SwiftShader, llvmpipe) get Low, discrete GPUs and Apple M-series get High,
-everything else Balanced, and phones/tablets are capped at Balanced; a render scale slider
+<tier>), Low, Balanced, High, Ultra) — Auto comes from the StarHermit hardware level (below); a render scale slider
 (`#gfx-scale`, 50–200% of the preset's); one select per category (`#gfx-cat-<name>`,
 `data-gfx-cat`) defaulting to "From preset (<tier>)" — shadows off/low/medium/high (512–2048²
 map), ambient occlusion off/on/high (16 or 32 SSAO samples), bloom, colour grade, anti-aliasing
@@ -381,13 +380,49 @@ off/FXAA/SMAA/MSAA, reflections, table detail plain/detailed, particles off/low/
 resolution (`#gfx-adaptive`, on by default: every 90 frames, an average above 26 ms steps the
 resolution down 10% to a floor of 60%, below 14 ms steps it back up 5%); Show frame rate
 (`#gfx-show-fps`, a bottom-left readout that never takes pointer input); and a summary line
-"GPU · cost summary · W×H px". Choosing a preset clears the overrides. Presets: Low = 80% scale,
+"GPU · Level N · cost summary · W×H px" ("Level" localized). Choosing a preset clears the overrides. Presets: Low = 80% scale,
 pixel ratio ≤ 1, context MSAA, no shadows/post, plain hall, sparks only (as cheap as the original
 game); Balanced = ratio ≤ 1.5, 512² shadows, bloom, grade, FXAA, reflections, detailed hall;
 High = ratio ≤ 2, 1024² shadows, SSAO, SMAA, dust motes; Ultra = 125% scale, 2048² shadows, full
 SSAO. Changes apply immediately and are stored in `settings.graphics` inside
 `meldhall.settings.v1` (an old `quality` value migrates to the matching preset); the resolved
 preset is mirrored on `body[data-gfx-preset]`, `body[data-gfx-detail]` and `#gl[data-gfx-preset]`.
+
+**Hardware-level detection.** `src/gpu-level.js` (shared StarHermit copy, `StarHermitGpu`) rates the
+WebGL unmasked renderer plus device facts (`detectSystem()`: phone/tablet, cores, memory, screen) on
+the StarHermit hardware level 0–20 (0 = Galaxy S20 / Intel UHD or weaker, every software renderer and
+no WebGL; 20 = RTX 5090; each level ≈ 1.23×; laptop parts two levels below desktop; phones, tablets
+and ≤ 4 GB machines capped at 9). `gfx.js` maps it with `presetForLevel(level, { low: 0, balanced: 4,
+high: 10, ultra: 17 })`, so Auto picks Ultra on strong GPUs; adaptive resolution still steps down when
+slow. Headless SwiftShader is level 0 → Low. Phones and tablets pace Auto FPS at half the display
+refresh rate ("Auto (half refresh rate)") and start at 16 simultaneous sounds (shared
+`game-options.js`).
+
+**Per-preset budgets** (`BUDGETS` / `budgetFor` in `src/gfx.js`). Each preset holds 60 FPS on the
+weakest GPU Auto gives it — Low at level 0, Balanced 4, High 10, Ultra 17. Cards, pick targets and
+rules are identical on every preset; only visuals change. The mote count is tuned at the floor level
+and scales up within the preset on faster GPUs (`StarHermitGpu.scaleBudget`, ≤ 2×, at most 400).
+
+| Budget | Low | Balanced | High | Ultra |
+|---|---|---|---|---|
+| Shading model (hall, table, cards) | Lambert | Standard | Standard + Physical (clear-coated card faces) | as High |
+| Procedural floor texture (felt ½, wood rim 2× wide × ⅛ tall) | 128 px | 256 px | 512 px | 1024 px |
+| Table rim/felt segments (detailed hall) | 32 | 48 | 96 | 128 |
+| Dust motes (Particles high + detailed hall) | 40 | 70 | 140 | 200 |
+| Sparks per burst (Particles high; low: half) | 24 | 40 | 64 | 96 |
+| Bloom resolution | ½ | ½ | ½ | full |
+
+Changing preset rebuilds the hall and card materials live when the shading model, texture size or
+segments change.
+
+**Benchmark** (`node tools/gfx-bench.mjs meld-hall`; hook `tests/gfx-bench.mjs` picks the preset in
+Settings → Graphics and plays a 4-player Practice match through the visible draw / meld / lay off /
+discard buttons and hand cards, pressing Next or Replay at the results). Measured 2026-10-17 (GPU ms
+above the draws-skipped floor, projected to the preset's floor level; CPU p90 on the RTX 5090 run):
+
+- Desktop 1920×1080: PASS low (typical 1.27 / slow 0.84 ms GPU, CPU 0.70 ms); PASS balanced (5.10 /
+  5.37, CPU 0.80); PASS high (3.68 / 4.98, CPU 1.10); PASS ultra (2.39 / 2.78, CPU 1.10).
+- Mobile 390×844 @3×: PASS low (0.00 / 0.31, CPU 0.50); PASS balanced (0.00 / 0.07, CPU 0.70).
 
 **Hero of the screen.** The felt between the meld row and the hand row — the melds are what the
 player reads, so the camera centres slightly behind them and the lamps pool light there.
@@ -610,7 +645,7 @@ click and to wait for the AI, never to mutate state.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `tests/run.js` (60 tests, no dependencies) then `tests/i18n.test.mjs` (4 tests: every
+`npm test` → `tests/run.js` (62 tests, no dependencies) then `tests/i18n.test.mjs` (4 tests: every
 markup/code key translated in all nine locales with placeholders intact, lesson/challenge/achievement
 texts, live switching, Graphics/account strings):
 
@@ -625,7 +660,10 @@ texts, live switching, Graphics/account strings):
   immutable within a UTC day, five unique themes, lowercase achievement keys, actionable lessons;
 - session: undo in practice, none in journey, stage/content agreement, lesson completion,
   idempotent achievements.
-- graphics: `detectPreset` on sample GPU strings (software → Low, discrete → High, mobile cap),
+- graphics: hardware level → preset (SwiftShader/llvmpipe/no WebGL, AMD Radeon Graphics and Intel UHD
+  → Low, Iris Xe → Balanced, GTX 1070 → High, RTX 4080/5090 → Ultra, phones such as Adreno 740 capped
+  at Balanced), the per-preset budget table (explicit, non-decreasing, floor-level tuned, scaling with
+  the level),
   `resolve` with preset/override/scale clamp, choosing a preset clears overrides, Graphics panel
   strings complete in all nine locales.
 - platform: token, nickname, cloud save with ETags, settings KV, bindings, invite, no fetch standalone,
@@ -634,7 +672,7 @@ texts, live switching, Graphics/account strings):
 
 `npm run test:e2e` → `tests/e2e.mjs` at 1280×800 and 390×844 (touch), failing on any console error
 or page error other than the known SwiftShader/GL noise: title loads → settings open/close → help
-open/back → Graphics settings (Low then High applied, a shadows override reflected in the summary,
+open/back → Graphics settings (Low then High applied, a shadows override reflected in the summary, which shows "Level 0",
 both surviving a reload, Auto clearing the override and resolving to Low under SwiftShader) →
 **Language** (own signed-in context, stubbed StarHermit API: Automatic resolves to fr-CA from
 `GET /api/v1/me/language`; a practice match starts in French; Pause → Settings → Italian re-renders the

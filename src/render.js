@@ -90,8 +90,15 @@
     if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
     return t;
   }
-  function feltTexture() {
-    const cv = canvas(256, 256), g = cv.getContext('2d'), r = rng(7);
+  // Procedural textures are authored at a fixed size and drawn scaled into the preset's texture budget
+  // (grain is per pixel, so it stays crisp at any size).
+  function scaled(w, h, aw, ah) {
+    const cv = canvas(w, h), g = cv.getContext('2d');
+    g.scale(w / aw, h / ah);
+    return [cv, g];
+  }
+  function feltTexture(size) {
+    const n = size || 256, [cv, g] = scaled(n, n, 256, 256), r = rng(7);
     g.fillStyle = '#f0f0f0'; g.fillRect(0, 0, 256, 256);
     g.globalAlpha = 0.07; g.lineWidth = 1;
     for (let i = 0; i < 900; ++i) { // short fibres
@@ -100,11 +107,11 @@
       g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
     }
     g.globalAlpha = 1;
-    grain(g, 256, 256, 22, 11);
+    grain(g, n, n, 22, 11);
     return tex(cv, [7, 7]);
   }
-  function woodTexture() {
-    const cv = canvas(1024, 64), g = cv.getContext('2d'), r = rng(3);
+  function woodTexture(size) {
+    const w = (size || 512) * 2, h = Math.max(16, (size || 512) / 8), [cv, g] = scaled(w, h, 1024, 64), r = rng(3);
     g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, 1024, 64);
     for (let i = 0; i < 60; ++i) { // long grain streaks along the rim
       const y = r() * 64, h = 0.5 + r() * 2.2;
@@ -113,11 +120,11 @@
       for (let x = 0; x <= 1024; x += 32) g.lineTo(x, y + Math.sin(x * 0.01 + i) * 1.5);
       g.lineTo(1024, y + h); g.lineTo(0, y + h); g.fill();
     }
-    grain(g, 1024, 64, 14, 5);
+    grain(g, w, h, 14, 5);
     return tex(cv, [3, 1]);
   }
-  function floorTexture() {
-    const cv = canvas(512, 512), g = cv.getContext('2d'), r = rng(9);
+  function floorTexture(size) {
+    const n = size || 512, [cv, g] = scaled(n, n, 512, 512), r = rng(9);
     for (let row = 0; row < 8; ++row) {
       let x = -r() * 256;
       while (x < 512) {
@@ -130,7 +137,7 @@
       }
       g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, row * 64, 512, 2);
     }
-    grain(g, 512, 512, 18, 13);
+    grain(g, n, n, 18, 13);
     return tex(cv, [5, 5]);
   }
   function dotTexture() {
@@ -339,9 +346,11 @@
       this.key.shadow.mapSize.set(size, size);
       if (this.key.shadow.map) { this.key.shadow.map.dispose(); this.key.shadow.map = null; }
     }
-    if (!prev || prev.detail !== g.detail) this._buildEnvironment();
+    const pb = prev && prev.budget, b = g.budget;
+    const assetsChanged = !pb || !b || pb.material !== b.material || pb.texture !== b.texture || pb.segments !== b.segments;
+    if (!prev || prev.detail !== g.detail || assetsChanged) this._buildEnvironment();
     this._applyReflections();
-    if (!prev || prev.particles !== g.particles || prev.detail !== g.detail) this._buildParticles();
+    if (!prev || prev.particles !== g.particles || prev.detail !== g.detail || !pb || !b || pb.motes !== b.motes) this._buildParticles();
     this.adaptiveScale = 1;
     this._frames.length = 0;
     this.postKey = null; // rebuild the post chain on the next frame
@@ -351,7 +360,7 @@
       if (!o.material) return;
       (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; });
     });
-    if (prev && prev.detail !== g.detail && this.lastState) this.sync(this.lastState, this.lastSelection);
+    if (prev && (prev.detail !== g.detail || assetsChanged) && this.lastState) this.sync(this.lastState, this.lastSelection);
   };
 
   Scene.prototype._applyReflections = function () {
@@ -385,15 +394,15 @@
     const grp = this.envGroup = new THREE.Group();
     this.scene.add(grp);
     const th = this.theme, detailed = this.q.detail === 'detailed';
-    const self = this;
+    const self = this, b = this.q.budget || Gfx.budgetFor(this.q.preset), tb = b.texture, seg = detailed ? b.segments : 48;
     function T(t) { t.anisotropy = self.anisotropy; self.envTextures.push(t); return t; }
     function add(mesh, cast, receive) { mesh.castShadow = !!cast; mesh.receiveShadow = !!receive; grp.add(mesh); return mesh; }
 
     // floor
     const floor = add(new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
-      new THREE.MeshStandardMaterial(detailed
-        ? { color: lin(th.wood).multiplyScalar(0.55), map: T(floorTexture()), roughness: 0.78, envMapIntensity: 0.35 }
+      self._mat(detailed
+        ? { color: lin(th.wood).multiplyScalar(0.55), map: T(floorTexture(tb)), roughness: 0.78, envMapIntensity: 0.35 }
         : { color: lin(th.wall).multiplyScalar(1.3), roughness: 0.95 })
     ), false, true);
     floor.rotation.x = -Math.PI / 2;
@@ -401,23 +410,23 @@
 
     // table: wood rim + felt inlay (procedural, silhouette-first)
     const rim = add(new THREE.Mesh(
-      new THREE.CylinderGeometry(6.4, 6.7, 0.5, detailed ? 96 : 48),
-      new THREE.MeshStandardMaterial(detailed
-        ? { color: lin(th.wood), map: T(woodTexture()), roughness: 0.42, metalness: 0.05, envMapIntensity: 0.8 }
+      new THREE.CylinderGeometry(6.4, 6.7, 0.5, seg),
+      self._mat(detailed
+        ? { color: lin(th.wood), map: T(woodTexture(tb)), roughness: 0.42, metalness: 0.05, envMapIntensity: 0.8 }
         : { color: lin(th.wood), roughness: 0.6, metalness: 0.05 })
     ), false, true);
     rim.position.y = -0.25;
     const felt = add(new THREE.Mesh(
-      new THREE.CylinderGeometry(6.0, 6.0, 0.52, detailed ? 96 : 48),
-      new THREE.MeshStandardMaterial(detailed
-        ? { color: lin(th.felt), map: T(feltTexture()), roughness: 0.95, envMapIntensity: 0.25 }
+      new THREE.CylinderGeometry(6.0, 6.0, 0.52, seg),
+      self._mat(detailed
+        ? { color: lin(th.felt), map: T(feltTexture(tb / 2)), roughness: 0.95, envMapIntensity: 0.25 }
         : { color: lin(th.felt), roughness: 0.9 })
     ), false, true);
     felt.position.y = -0.24;
 
     // hanging lamps over the far side of the table
-    const lampMat = new THREE.MeshStandardMaterial({ color: 0x333844, roughness: 0.4, metalness: 0.6 });
-    const shadeMat = new THREE.MeshStandardMaterial(detailed
+    const lampMat = self._mat({ color: 0x333844, roughness: 0.4, metalness: 0.6 });
+    const shadeMat = self._mat(detailed
       ? { color: lin(th.accent), emissive: lin(th.accent), emissiveIntensity: 0.25, roughness: 0.3, metalness: 0.85, side: THREE.DoubleSide }
       : { color: lin(th.accent), emissive: lin(th.accent), emissiveIntensity: 0.4 });
     this.bulbs = [];
@@ -437,18 +446,18 @@
       // brass inlay where the felt meets the rim: catches the lamp and room reflections
       const brass = add(new THREE.Mesh(
         new THREE.TorusGeometry(6.08, 0.045, 10, 128),
-        new THREE.MeshStandardMaterial({ color: lin('#c89a4a'), roughness: 0.28, metalness: 1, envMapIntensity: 1.2 })
+        self._mat({ color: lin('#c89a4a'), roughness: 0.28, metalness: 1, envMapIntensity: 1.2 })
       ), false, true);
       brass.rotation.x = -Math.PI / 2;
       brass.position.y = 0.012;
       // wall panels + chair rail
-      const panelMat = new THREE.MeshStandardMaterial({ color: lin(th.wood).multiplyScalar(0.55), roughness: 0.6, envMapIntensity: 0.5 });
+      const panelMat = self._mat({ color: lin(th.wood).multiplyScalar(0.55), roughness: 0.6, envMapIntensity: 0.5 });
       for (let i = 0; i < 7; ++i) {
         const p = add(new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.4, 0.1), panelMat), false, true);
         p.position.set(-7.2 + i * 2.4, 1.2, -7.5);
       }
       const wall = add(new THREE.Mesh(new THREE.PlaneGeometry(40, 14),
-        new THREE.MeshStandardMaterial({ color: lin(th.wall).multiplyScalar(1.4), roughness: 0.9 })), false, true);
+        self._mat({ color: lin(th.wall).multiplyScalar(1.4), roughness: 0.9 })), false, true);
       wall.position.set(0, 6, -7.62);
       this.scene.fog = new THREE.FogExp2(lin(th.wall), 0.035);
       this.lampLight.intensity = 0.75;
@@ -468,12 +477,26 @@
     this.cardGeo = detailed ? this.roundGeo : this.boxGeo;
   };
 
+  // Shading model per the preset's budget: Lambert on Low, Standard on Balanced, Standard/Physical on
+  // High/Ultra. Lambert keeps colour, map, emissive and side; it ignores the PBR-only parameters.
+  Scene.prototype._mat = function (p, physical) {
+    const tier = (this.q.budget && this.q.budget.material) || 'standard';
+    if (tier === 'lambert') {
+      const l = {};
+      for (const k of ['color', 'map', 'emissive', 'emissiveIntensity', 'side', 'transparent', 'opacity']) if (p[k] !== undefined) l[k] = p[k];
+      return new THREE.MeshLambertMaterial(l);
+    }
+    if (physical && tier === 'physical') return new THREE.MeshPhysicalMaterial(p);
+    if (physical) { p = Object.assign({}, p); delete p.clearcoat; delete p.clearcoatRoughness; }
+    return new THREE.MeshStandardMaterial(p);
+  };
+
   Scene.prototype._cardMat = function (p, glossy) {
     if (this.q.detail === 'detailed') {
-      if (glossy) return new THREE.MeshPhysicalMaterial(Object.assign({ roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: 0.28 }, p));
-      return new THREE.MeshStandardMaterial(Object.assign({ envMapIntensity: 0.3 }, p));
+      if (glossy) return this._mat(Object.assign({ roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: 0.28 }, p), true);
+      return this._mat(Object.assign({ envMapIntensity: 0.3 }, p));
     }
-    return new THREE.MeshStandardMaterial(p);
+    return this._mat(p);
   };
 
   Scene.prototype._buildParticles = function () {
@@ -488,7 +511,7 @@
     if (!this.dotTex) this.dotTex = dotTexture();
     const p = this.q.particles;
     if (p !== 'off') this._initBurst(p === 'high' ? 2000 : 500);
-    if (p === 'high' && this.q.detail === 'detailed') this._initMotes(140);
+    if (p === 'high' && this.q.detail === 'detailed') this._initMotes((this.q.budget || Gfx.budgetFor(this.q.preset)).motes);
   };
 
   // effects layer: bounded particle pool (points), never raycastable
@@ -533,7 +556,8 @@
   Scene.prototype.burst = function (x, y, z, count) {
     if (!this.fx || this.reducedMotion) return;
     const fx = this.fx;
-    const n = Math.min(count || 24, this.q.particles === 'high' ? 64 : 32);
+    const cap = (this.q.budget || Gfx.budgetFor(this.q.preset)).burst;
+    const n = Math.min(count || 24, this.q.particles === 'high' ? cap : Math.round(cap / 2));
     for (let i = 0; i < n; ++i) {
       const k = fx.next = (fx.next + 1) % fx.max;
       fx.pos[k * 3] = x; fx.pos[k * 3 + 1] = y; fx.pos[k * 3 + 2] = z;
@@ -734,6 +758,15 @@
     this.ssao = null;
   };
 
+  // Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+  // frame size, so the pass's own setSize applies the budget's scale (half-res bloom below Ultra).
+  function atScale(pass, k) {
+    if (!(k < 1)) return pass;
+    const setSize = pass.setSize.bind(pass);
+    pass.setSize = function (w, h) { setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))); };
+    return pass;
+  }
+
   Scene.prototype._buildPost = function (w, h) {
     const g = this.q, r = this.renderer, pr = this.pixelRatio;
     this._disposePost();
@@ -772,7 +805,7 @@
       }
       if (g.bloom === 'on') {
         // high threshold: only lamp bulbs, the selection glow and sparks bloom
-        composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(pw, ph), 0.55, 0.4, 0.88));
+        composer.addPass(atScale(new THREE.UnrealBloomPass(new THREE.Vector2(pw, ph), 0.55, 0.4, 0.88), g.budget ? g.budget.bloomRes : 1));
       }
       const out = new THREE.ShaderPass(GradeShader);
       out.uniforms.uAmount.value = g.grade === 'on' ? 1 : 0;

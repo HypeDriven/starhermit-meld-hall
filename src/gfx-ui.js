@@ -16,7 +16,7 @@
     title: 'Graphics', quality: 'Quality', auto: 'Auto (detected: {tier})', scale: 'Render scale',
     fromPreset: 'From preset ({tier})', adaptive: 'Adaptive resolution', showFps: 'Show frame rate',
     postFailed: 'Post-processing is unavailable on this device; the table renders without it.',
-    unknownGpu: 'unknown GPU',
+    unknownGpu: 'unknown GPU', level: 'Level {n}',
     presets: { low: 'Low', balanced: 'Balanced', high: 'High', ultra: 'Ultra' },
     cats: { shadows: 'Shadows', ao: 'Ambient occlusion', bloom: 'Bloom', grade: 'Color grade',
       antialias: 'Anti-aliasing', reflections: 'Reflections', detail: 'Table detail', particles: 'Particles' },
@@ -38,7 +38,7 @@
     title: 'Grafik', quality: 'Qualität', auto: 'Automatisch (erkannt: {tier})', scale: 'Renderskalierung',
     fromPreset: 'Wie Voreinstellung ({tier})', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
     postFailed: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar; der Tisch wird ohne sie dargestellt.',
-    unknownGpu: 'unbekannte GPU',
+    unknownGpu: 'unbekannte GPU', level: 'Stufe {n}',
     presets: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', ultra: 'Ultra' },
     cats: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', bloom: 'Leuchteffekt', grade: 'Farbkorrektur',
       antialias: 'Kantenglättung', reflections: 'Spiegelungen', detail: 'Tischdetails', particles: 'Partikel' },
@@ -50,7 +50,7 @@
     title: 'Graphismes', quality: 'Qualité', auto: 'Auto (détectée : {tier})', scale: 'Échelle de rendu',
     fromPreset: 'Selon le préréglage ({tier})', adaptive: 'Résolution adaptative', showFps: 'Afficher la fréquence d’images',
     postFailed: 'Le post-traitement n’est pas disponible sur cet appareil ; la table est affichée sans.',
-    unknownGpu: 'GPU inconnu',
+    unknownGpu: 'GPU inconnu', level: 'Niveau {n}',
     presets: { low: 'Faible', balanced: 'Équilibrée', high: 'Élevée', ultra: 'Ultra' },
     cats: { shadows: 'Ombres', ao: 'Occlusion ambiante', bloom: 'Halo lumineux', grade: 'Étalonnage des couleurs',
       antialias: 'Anticrénelage', reflections: 'Reflets', detail: 'Détails de la table', particles: 'Particules' },
@@ -66,7 +66,7 @@
     title: 'Gráficos', quality: 'Calidad', auto: 'Automática (detectada: {tier})', scale: 'Escala de renderizado',
     fromPreset: 'Según el preajuste ({tier})', adaptive: 'Resolución adaptativa', showFps: 'Mostrar fotogramas por segundo',
     postFailed: 'El posprocesado no está disponible en este dispositivo; la mesa se muestra sin él.',
-    unknownGpu: 'GPU desconocida',
+    unknownGpu: 'GPU desconocida', level: 'Nivel {n}',
     presets: { low: 'Baja', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra' },
     cats: { shadows: 'Sombras', ao: 'Oclusión ambiental', bloom: 'Resplandor', grade: 'Corrección de color',
       antialias: 'Suavizado de bordes', reflections: 'Reflejos', detail: 'Detalle de la mesa', particles: 'Partículas' },
@@ -82,7 +82,7 @@
     title: 'Gráficos', quality: 'Qualidade', auto: 'Automática (detectada: {tier})', scale: 'Escala de renderização',
     fromPreset: 'Conforme a predefinição ({tier})', adaptive: 'Resolução adaptável', showFps: 'Mostrar taxa de quadros',
     postFailed: 'O pós-processamento não está disponível neste dispositivo; a mesa é exibida sem ele.',
-    unknownGpu: 'GPU desconhecida',
+    unknownGpu: 'GPU desconhecida', level: 'Nível {n}',
     presets: { low: 'Baixa', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra' },
     cats: { shadows: 'Sombras', ao: 'Oclusão de ambiente', bloom: 'Brilho', grade: 'Correção de cor',
       antialias: 'Antisserrilhamento', reflections: 'Reflexos', detail: 'Detalhes da mesa', particles: 'Partículas' },
@@ -94,7 +94,7 @@
     title: 'Grafica', quality: 'Qualità', auto: 'Automatica (rilevata: {tier})', scale: 'Scala di rendering',
     fromPreset: 'Come da preimpostazione ({tier})', adaptive: 'Risoluzione adattiva', showFps: 'Mostra frequenza fotogrammi',
     postFailed: 'La post-elaborazione non è disponibile su questo dispositivo; il tavolo viene mostrato senza.',
-    unknownGpu: 'GPU sconosciuta',
+    unknownGpu: 'GPU sconosciuta', level: 'Livello {n}',
     presets: { low: 'Bassa', balanced: 'Bilanciata', high: 'Alta', ultra: 'Ultra' },
     cats: { shadows: 'Ombre', ao: 'Occlusione ambientale', bloom: 'Bagliore', grade: 'Correzione colore',
       antialias: 'Antialiasing', reflections: 'Riflessi', detail: 'Dettagli del tavolo', particles: 'Particelle' },
@@ -115,11 +115,12 @@
 
   function fmt(s, vars) { return s.replace(/\{(\w+)\}/g, function (_, k) { return vars[k]; }); }
 
-  /** Localized cost summary: "GPU · shadows · … · W×H px". */
+  /** Localized cost summary: "GPU · Level N · shadows · … · W×H px". */
   function summary(L, info) {
     const r = info.resolved;
     const parts = [
       info.gpu || L.unknownGpu,
+      info.level != null ? fmt(L.level, { n: info.level }) : null,
       r.shadows === 'off' ? L.sum.noShadows : fmt(L.sum.shadows, { n: Gfx.SHADOW_MAP[r.shadows] }),
       r.ao === 'off' ? null : r.ao === 'high' ? L.sum.aoHigh : L.sum.ao,
       r.bloom === 'on' ? L.sum.bloom : null,
