@@ -279,31 +279,49 @@
       rs.appendChild(div);
     }
 
+    // The meld chips and the hand mirror are rebuilt only when their melds or
+    // cards change, and otherwise updated in place: syncAll runs after every
+    // AI command, and a click only fires when press and release land on the
+    // same element, so a rebuild mid-press lost the click (and keyboard focus).
     // meld chips
     const md = $('meld-dom');
-    md.innerHTML = '';
-    st.table.forEach(function (m, i) {
-      const chip = document.createElement('button');
-      chip.className = 'meld-chip';
-      chip.dataset.meld = i;
-      chip.textContent = (m.kind === 'set' ? T('Set {n}', { n: i }) : T('Run {n}', { n: i })) + ': ' + m.cards.map(Rules.cardName).join(' ');
-      md.appendChild(chip);
+    const chips = st.table.map(function (m, i) {
+      return (m.kind === 'set' ? T('Set {n}', { n: i }) : T('Run {n}', { n: i })) + ': ' + m.cards.map(Rules.cardName).join(' ');
     });
+    if (md.children.length !== chips.length || chips.some(function (text, i) { return md.children[i].textContent !== text; })) {
+      md.innerHTML = '';
+      chips.forEach(function (text, i) {
+        const chip = document.createElement('button');
+        chip.className = 'meld-chip';
+        chip.dataset.meld = i;
+        chip.textContent = text;
+        md.appendChild(chip);
+      });
+    }
 
     // accessible hand mirror
     const hd = $('hand-dom');
-    hd.innerHTML = '';
     const self = this;
+    const sameCards = hd.children.length === hand.cards.length && hand.cards.every(function (c, i) {
+      return hd.children[i].dataset.card === String(c);
+    });
+    if (!sameCards) {
+      hd.innerHTML = '';
+      hand.cards.forEach(function (c) {
+        const b = document.createElement('button');
+        b.dataset.card = c;
+        b.setAttribute('role', 'option');
+        b.innerHTML = Rules.RANKS[Rules.rankOf(c)] + '<br>' + Rules.SUIT_GLYPHS[Rules.suitOf(c)];
+        hd.appendChild(b);
+      });
+    }
     hand.cards.forEach(function (c, i) {
-      const b = document.createElement('button');
-      b.className = 'card-btn' + ((Rules.suitOf(c) === 1 || Rules.suitOf(c) === 2) ? ' red' : '') +
+      const b = hd.children[i];
+      const cls = 'card-btn' + ((Rules.suitOf(c) === 1 || Rules.suitOf(c) === 2) ? ' red' : '') +
         (self.selection.indexOf(c) >= 0 ? ' selected' : '');
-      b.dataset.card = c;
-      b.setAttribute('role', 'option');
+      if (b.className !== cls) b.className = cls;
       b.setAttribute('aria-selected', self.selection.indexOf(c) >= 0 ? 'true' : 'false');
       b.setAttribute('aria-label', T('{card}, value {value}', { card: Rules.cardName(c), value: Rules.cardValue(c) }));
-      b.innerHTML = Rules.RANKS[Rules.rankOf(c)] + '<br>' + Rules.SUIT_GLYPHS[Rules.suitOf(c)];
-      hd.appendChild(b);
     });
 
     this.syncActionButtons();

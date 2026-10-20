@@ -529,7 +529,9 @@ French costs height, never clipping.
 - **Live regions.** `#live-region` (polite) carries turn changes, hints, lesson completion, results
   headlines and replay verification; `#error-region` (assertive) carries rejection sentences.
   The hand is a real `role="listbox"` with `aria-multiselectable`, and each card button reports
-  `aria-selected` and a label of the form "Q♥, value 10".
+  `aria-selected` and a label of the form "Q♥, value 10". The hand buttons and meld chips are
+  updated in place after every AI command and rebuilt only when your cards or the table melds
+  change, so a card clicked while a rival plays still toggles and keyboard focus stays on it.
 - **Colour.** Suits carry glyphs as well as colour. Three colour-vision palettes shift the accent
   and the red-suit ink (`#14568f` for deuteranopia/protanopia, `#b03a2e` for tritanopia).
 - **Captions** are on by default for all non-UI sounds.
