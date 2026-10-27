@@ -16,43 +16,39 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | Genre | Turn-based rummy-family card game, single-player vs. AI |
 | Players | 2–4 seats; the human always holds seat 0, the rest are AI in local play |
 | Session | One round 2–4 min; a match to the target score 5–15 min |
-| Platforms | Desktop and mobile browsers, portrait and landscape |
-| Rendering | Three.js card table on `<canvas id="gl">`, with a complete semantic DOM mirror layered above it — the DOM is playable on its own when WebGL is unavailable |
-| Networking | None standalone (zero own-server requests). StarHermit platform glue (over `starhermit-sdk.js`) in `src/platform.js`; `score-script.js` is the platform script (leaderboard posting); `server.js` is a local static host |
+| Platforms | StarHermit engine script game (engine 1.19.1, host API 1.21, `engine.minor=20`): played natively by the StarHermit client and in browsers by the engine's web runtime; desktop and phones, portrait and landscape |
+| Rendering | The card table on `starhermit:scene` (three.js-like 3D) behind an immediate-mode `starhermit:ui` layer (HUD, rails, action tray, the hand as card buttons, dialogs) |
+| Networking | None of its own. The platform (player, cloud save, settings, leaderboards, clock) through `starhermit:platform` / `starhermit:storage`; `score-script.js` is the platform script (leaderboard posting) |
 
 ### File map
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | All five screens plus two overlays as static markup; loads three.js, its r137 addons and the eleven game scripts in dependency order |
-| `src/rules.js` | Pure deterministic rules engine (`window.MeldRules` / CommonJS). No DOM, no timers |
+| `starhermit.txt` | Manifest: name, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.*` (entry `native/main.ts`, version 1.19.1, minor 20, capabilities platform/storage/clipboard), `control.*` keys, `engine.group.*` and `engine.gamepad.*` |
+| `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (never edited by hand) |
+| `native/main.ts` | Entry module: screen flow, the session's events (sounds, captions, announcements, sparks, results), commands from the tray/hand/chips/keys/pads/table taps, hints, undo, AI pacing on the fixed-step clock, results posting, lifecycle |
+| `native/screens.ts` | Every screen and dialog on `starhermit:ui`: title, mode select, play (HUD, rails or sheets, tray, hand), pause and Settings dialogs, How to Play, results; captions, hint line and toast |
+| `native/render.ts` | The 3D hall and table on `starhermit:scene`: environment, card atlas UVs, sync from the rules state, picking, framing (`setViewOffset`), particles, the look per graphics tier |
+| `native/quality.ts` | The old presets and budgets keyed by the runtime's quality tier and level |
+| `native/audio.ts` | One-shots from `sfx/`, captions, the room tone and chord pad rendered into looping clips |
+| `native/platform.ts` | localStorage stand-in for `session.js`, the save (cloud slot, merge, old-save migration), the game's options as engine settings, legacy settings removal, player, invite, clock, score posting, leaderboard rows |
+| `native/style.ts` | Registers `assets/ui-style.json`, the theme, high-contrast and colour-vision tokens |
+| `native/i18n.ts` | Locale from the runtime's interface language; `T()`, `N()`, `S()` |
+| `native/classic.ts` | Loads the shared classic scripts (`loadClassic`) and types them |
+| `src/rules.js` | Pure deterministic rules engine (`MeldRules` / CommonJS). No DOM, no timers |
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
-| `starhermit-sdk.js` | Shared StarHermit client (unmodified copy) |
-| `src/platform.js` | `MeldPlatform` over the SDK: identity, sign-in/invite, cloud-save mirror, settings KV, key bindings, leaderboard read + score posting, sync status |
+| `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing (timers injectable: `setTimers`), settings/progress through `localStorage` |
+| `src/store.js` | `MeldStore`: the progress document, its merge, the old cloud slot reader, session.js's checksummed envelope, the game's options and the old settings-KV keys |
+| `src/strings.js`, `src/i18n.js` | Translation tables (English keys, nine locales) and the pure `MHI18N` core |
 | `src/sh-strings.js` | Account strings (sign-in, invite, toasts, leaderboard line) in the nine locales |
-| `sh-language.js` | Shared StarHermit language resolver (unmodified copy): Automatic / explicit choice, `ui.language` sync |
-| `src/strings.js` | Translation tables for every player-facing string (English keys; nine locales) |
-| `src/i18n.js` | `MHI18N`: `T()`, live locale switching through `sh-language.js`, static-markup translation, `mh-language` event |
-| `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing, localStorage settings/progress |
-| `src/audio.js` | `MeldAudio`: WebAudio buses, sampled one-shots from `sfx/`, synth fallbacks, captions |
-| `src/gpu-level.js` | Shared StarHermit hardware-level module (`StarHermitGpu`, loaded before `src/gfx.js`), copied from the platform tools, never edited here |
-| `src/gfx.js` | `MeldGfx`: pure graphics quality model — presets, per-category overrides, hardware-level detection (`detectLevel`, `presetForLevel`, `detectPreset`), per-preset `BUDGETS`/`budgetFor`, `resolve()`, `presetTier()`, `describe()` |
-| `src/gfx-ui.js` | `MeldGfxUI`: the Settings overlay's Graphics section — builds and binds the controls, localized strings (9 locales, relabelled live by `setLocale`), cost summary |
-| `src/render.js` | `MeldRender`: the 3D hall, procedural card/table textures, picking, particles, graphics settings, post-processing chain, adaptive resolution |
-| `src/ui.js` | `MeldUI`: screens, focus, keyboard, live regions, settings binding, the accessible hand list |
-| `src/main.js` | Bootstrap: capability detection, time sync, pointer taps, render loop, lifecycle, local funnel |
-| `src/style.css` | Layout, palette, contrast/large-text/colour-vision variants, safe-area padding |
-| `src/three.min.js` | Vendored Three.js r137 (UMD build, `window.THREE`) — the renderer the game uses |
-| `src/vendor/three-r137/` | Same-revision addons from `three@0.137.0/examples/js`: EffectComposer, RenderPass, ShaderPass, MaskPass, UnrealBloomPass, SMAAPass, SSAOPass, their shaders, SimplexNoise, RoomEnvironment |
-| `src/three.module.js` | Three.js r170 ES module, vendored but not loaded |
 | `score-script.js` | StarHermit platform script (`server=`): range-checks a finished match total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
-| `server.js` | Local static server; its legacy time/health endpoints and `/ws` hosted sessions are no longer called by the client |
-| `tests/run.js` | 62 offline tests: rules, scoring, fuzzing, replay determinism, content validation, the StarHermit adapter over the real SDK with a stubbed, ETag-versioned fetch (boot merge, save conflict), graphics model and panel locales |
-| `tests/i18n.test.mjs` | 4 `node --test` tests: every key used in markup and code exists in all nine locales, content texts, live switching, Graphics/account strings |
-| `tests/e2e.mjs` | Playwright-core playthrough of the real UI at 1280×800 and 390×844 |
+| `assets/ui-style.json` | The UI style sheet, converted from `tools/ui-style.css` by `npm run css` |
+| `assets/textures/` | Baked card faces and backs (atlases), felt, wood rim and floor per texture budget (`npm run textures`) |
+| `assets/*.webp` | Authored images: hall key art, results still, card-back art (baked into `backs.webp`) |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
-| `assets/` | Authored images: hall key art, results still, card-back art |
-| `coverart.png`, `icon.png`, `favicon.svg` | Platform art |
+| `tests/` | `run.js` (rules/content/session, 52 tests), `store.test.mjs`, `i18n.test.mjs`, `native.mjs` (+ `native/*.play`) |
+| `tools/` | `package-web.mjs`, `css.mjs` + `ui-style.css`, `bake-textures.mjs`, `gen-plays.mjs`, `browser-play.mjs` |
+| `coverart.png`, `cover.jpg`, `icon.png` | Platform art |
 
 ---
 
@@ -60,14 +56,14 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 
 **1. The table tells the truth.** Every fact that decides a turn — whose turn it is, deck
 count, deadwood in hand, the exact contents of every table meld, each seat's score — is
-readable as text in the HUD and rails at all times. *Rules in:* redundant DOM mirrors of
-3D state, the objective sentence repeated in HUD and rail. *Rules out:* information that
+readable as text in the HUD and rails at all times. *Rules in:* text and widget mirrors of
+3D state (the hand strip, meld chips, scores), the objective sentence repeated in HUD and rail. *Rules out:* information that
 exists only as a 3D affordance, hover-only tooltips, colour as a sole signal.
 
-**2. One engine, one truth.** Hints, tutorials, the AI, the e2e test and the authoritative
-server all call the same `legalActions` / `applyCommand` pair in `rules.js`. *Rules in:*
-a hint is literally "the first legal action the engine would allow"; the server can reject
-a client without a second rulebook. *Rules out:* UI-side legality shortcuts, a separate
+**2. One engine, one truth.** Hints, tutorials, the AI and the play-script generator
+all call the same `legalActions` / `applyCommand` pair in `rules.js`. *Rules in:*
+a hint is literally "the first legal action the engine would allow"; a future referee
+script needs no second rulebook. *Rules out:* UI-side legality shortcuts, a separate
 "tutorial mode" rules path, AI that peeks at hidden hands (it reads only `state`, and
 `aiChoose` never touches opponents' cards).
 
@@ -83,7 +79,7 @@ sound sources, one small particle burst reserved for a completed meld. *Rules ou
 showers, chip stacks, timers that shout, any sound above a conversational level.
 
 **5. Nothing is a dead end.** Illegal input is always explained in words, not merely refused:
-`reasonText` turns an engine reason code into a sentence in the assertive live region while
+`reasonText` turns an engine reason code into an assertive screen-reader sentence while
 `invalid` plays. *Rules in:* disabled action buttons that re-enable the instant the selection
 becomes legal, Hint on demand, Undo in Practice. *Rules out:* silent rejection, modal
 "you cannot do that" dialogs that steal focus.
@@ -205,7 +201,7 @@ Undo exists only in Practice (`allowUndo = mode === 'practice'`); it rewinds thr
 serialized prior states until it reaches a state that is the human's draw phase, so one press
 undoes a whole turn including the AI reply. The stack is capped at 200 entries.
 
-Hint (`UI.doHint`) reads `session.legal()` and announces the first meld, else the first layoff,
+Hint (`doHint` in `native/main.ts`) reads `session.legal()` and announces the first meld, else the first layoff,
 else the first action — it never searches deeper than the engine's own enumeration, so it advises
 without solving.
 
@@ -252,76 +248,89 @@ checksum silently falls back to defaults rather than loading a tampered save.
 
 ## 6. Controls and interaction
 
-| Input | Desktop | Touch |
-|---|---|---|
-| Select / deselect card | Click a card button; ←/→ moves focus, Enter or Space toggles | Tap a card in the hand strip, or tap the 3D card |
-| Draw from stock | *Draw deck* button or **D** | Tap the button, or tap the 3D deck |
-| Draw from discard | *Take discard* or **F** | Tap the button, or tap the 3D discard pile |
-| Meld selection | *Meld* or **M** (needs ≥3 selected forming a legal meld) | Tap *Meld* |
-| Lay off | *Lay off* or **L** with exactly one card selected | Tap the meld chip in the right rail, or the 3D ring marker |
-| Discard | *Discard* or **X** with exactly one card selected | Tap *Discard* |
-| Undo / Hint | **U** / **H** | Tray buttons |
-| Pause | **P** or Esc (Esc first clears a selection if one exists) | ⏸ in the HUD |
-| Camera reset | **C** | — |
-| Panels | — | ☰ and ⋯ open the left/right rails as bottom sheets |
+Actions are declared in `starhermit.txt` (`control.*` with keys, `engine.gamepad.*` with pad
+controls, grouped as Hand / Turn / Assists / Match); players rebind keys and pads in the runtime's
+Options (Settings → Key bindings opens it), and How to Play lists the effective keys.
 
-Bindings live in `settings.bindings` and the help screen renders them from that object, so a
-rebound key documents itself. Canvas taps are separated from camera drags by a threshold in
-`main.js`: a pointer that moves more than 12 px or is held longer than 600 ms is a gesture,
-not a tap. Pointer capture is taken on `pointerdown` and released on cancel/lost-capture.
+| Action (`control.`) | Keys | Gamepad | Pointer / touch |
+|---|---|---|---|
+| Previous / next card (`left`, `right`) | ← / → | D-pad or left stick left / right | — |
+| Select card (`confirm`) | Enter, Space | South (A) | Click / tap a card in the hand strip, or a card of your hand on the table |
+| Draw from deck (`draw_deck`) | D | West (X) | *Draw deck* in the tray, or the deck on the table |
+| Take discard (`draw_discard`) | F | North (Y) | *Take discard*, or the discard pile on the table |
+| Meld selection (`meld`) | M | Left shoulder | *Meld* (needs ≥ 3 selected forming a legal meld) |
+| Lay off (`layoff`) | L | Left trigger | *Lay off* with one card selected; a meld chip in the Table rail; the meld's ring marker on the table |
+| Discard (`discard`) | X | Right shoulder | *Discard* with one card selected |
+| Undo (`undo`, Practice) | U | Select (View) | *Undo* |
+| Hint (`hint`) | H | Right trigger | *Hint* |
+| Camera reset (`camera_reset`) | C | Right stick press | — |
+| Cancel (`cancel`) | Esc | East (B) | — (clears a selection, else opens the pause menu; closes dialogs, How to Play and the mode select) |
+| Pause (`pause`) | P | Start (Menu) | ⏸ in the HUD |
 
-**Input locking.** There is no timed lock. Legality *is* the lock: `syncActionButtons` disables
-every tray button whose action is not currently legal — including all of them while an AI seat
-is thinking, because `legalActions` returns `[]` for a seat that is not on turn. The AI driver
-itself is suspended whenever the pause or settings overlay is open, the screen is not `play`,
-or the tab is hidden (`setAIPaused` in `main.js`).
+The arrows always walk the hand (the focused card gets the focus ring); Enter and Space act on
+whatever widget has focus (a card, a tray button) and select the card at the hand position when
+nothing has focus. Every button also takes Tab and Enter. A table tap is a press and release within
+12 px and 600 ms (a longer press or a drag is a gesture, not a tap), decided after the frame's UI is
+built so presses on the HUD, rails, tray and hand stay theirs; the deck and the discard pile are
+named targets in the accessibility tree (`Deck`, `Discard pile`).
 
-**Feedback per input.** Selection: card lifts 10 px with an accent ring, `aria-selected` flips,
-`select` sound. Legal action: the matching sound plus a rebuilt scene; melds add a 32-particle
-burst. Illegal action: `invalid` sound plus a sentence in the assertive live region. Haptics
-(12 ms) fire on every committed action when enabled and supported.
+**Input locking.** Legality *is* the lock: every tray button whose action is not currently legal is
+disabled — all of them while an AI seat is thinking, because `legalActions` returns `[]` for a seat
+not on turn. The AI waits while the pause menu or Settings is open, off the play screen, and while
+the window is hidden (`refreshAI` in `native/main.ts`).
+
+**Feedback per input.** Selection: the hand card lifts 10 px with an accent ring, the 3D card lifts
+and bobs over an accent ring on the felt, the `select` sound. Legal action: the matching sound and a
+rebuilt table; melds add a 32-particle burst. Illegal action: the `invalid` sound and an assertive
+screen-reader sentence. Haptics (a 12 ms vibration) on every committed action when enabled and the
+device has a motor.
 
 ---
 
 ## 7. Screens and UI flow
 
 ```
-title ──Play──▶ mode ──Start──▶ play ──round/match end──▶ results ──▶ play | title
-  │  └──Daily / Journey / Learn────▶ play          results ──Leave──▶ title
-  └──How to Play──▶ help ──Back──▶ title
-play ──Esc/P──▶ [overlay-pause] ──Help──▶ help ──Back──▶ play
-any ──Settings──▶ [overlay-settings] (modal, focus-trapped by focus restore)
+title ──Play──▶ mode ──Start──▶ play ──round/match end──▶ results ──Next round / Play again──▶ play
+  │  └──Daily / Journey / Learn──────▶ play               results ──Leave──▶ title
+  ├──How to Play──▶ help ──Back──▶ title
+  └──Settings──▶ [Settings dialog]
+play ──Esc/P/⏸──▶ [Pause dialog] ──Settings──▶ [Settings dialog] ──Done──▶ [Pause dialog]
+                                 ──Help──▶ help ──Back──▶ play
 ```
 
-`UI.show` toggles `.active` on exactly one of the five `<section class="screen">` elements and
-moves focus to its first button or heading. Overlays remember `document.activeElement` and
-restore it on close.
+Screens are drawn every frame by `native/screens.ts`; focus goes to each screen's first control
+(Play, the Practice mode, Resume, Done, Next round). The pause menu and Settings are modal
+`ui.dialog`s over a dim of the screen; Back/Escape closes the top one.
 
-**Play layout.** A CSS grid: HUD row, body, action tray, hand strip. Below 1024 px the grid is a
-single column and the two rails are hidden, reachable as bottom sheets (`position:absolute`,
-`max-height:50vh`, scrollable) via the ☰ / ⋯ buttons. At 1024 px and above the grid becomes
-`260px 1fr 260px` and both rails are permanently visible beside the table. The 3D canvas is a
-fixed backdrop behind the screen layer; `#screen-play` is `pointer-events:none` with its children
-re-enabled, so canvas picking works through the empty middle of the layout while every control
-stays clickable.
+- **Title:** the key art under a dark scrim (a plain background in high contrast) with a slow warm
+  lamp glow on detailed looks (static under reduced motion); Play (primary), Daily Challenge with the
+  day, Journey with the stages unlocked (n/40), Learn, How to Play, Settings, Sign in with StarHermit
+  (signed out) and Invite a friend (signed in), the profile line.
+- **Mode select:** the five modes (the chosen one outlined) with its description, expected duration
+  and ranking; Practice shows Players (2/3/4), Target score (30/50/100) and AI difficulty selects,
+  Challenge a challenge select; Back / Start.
+- **Play:** the HUD (objective, turn and deck badges, the score badge, ☰ progress, ⏸ pause, ⋯ status),
+  the Objective / Progress rail and the Table (meld chips) / Scores rail, the action tray with key
+  hints, and the hand strip of paper card buttons (52 × 72, rank over suit glyph, red suits in the
+  palette's red). The hint line (5 s) and sound captions (1.8 s) show above the tray.
+- **Results:** the results still (hidden in high contrast and in short landscape), "Round N over" / "Match over", the
+  headline, the score table (player, deadwood, match score / target, ★ for the round winner, the
+  reason), unlocked achievements, the leaderboard line (signed in, finished matches), the Daily's
+  top-ten board (signed in), Leave / Replay (verifies the replay envelope) / Next round or Play again.
+- **How to Play:** four rule cards, the effective keys, pointer/touch and gamepad lines, Back.
+- **Settings dialog:** a note that sound, graphics, language, larger text, high contrast and reduced
+  motion are in the StarHermit Options; Open Options; Key bindings; Accessibility: Captions for sounds,
+  Haptics, Left-handed controls (mirrors the action tray's order), Color palette; Done.
 
-**Short landscape phones** (≤500 px tall, <1024 px wide). The HUD is one band (objective on its own
-wrapping line, badges below it), the action tray becomes a two-column block on the right (key hints
-hidden; they stay in Help) and the hand strip (44×60 px cards) runs under the table, so the 3D table
-gets the whole left band. `render.js resize()` frames the table between the HUD, the hand strip and a
-right-hand tray column (`setViewOffset` narrows the band from the right).
-
-**Large screens.** `ui-scale.js` sets `--ui-scale` (exactly 1 up to a 1600×1000 viewport, then
-`min(w/1600, h/1000)`, capped at 2.5); every screen, overlay and toast zooms by it, so the HUD,
-rails, tray, hand strip and panels keep their desktop proportions on 2K–4K monitors, while the 3D
-canvas stays unzoomed full-viewport and frames the table between the zoomed HUD and hand.
-
-**Safe areas.** `--sat/--sab/--sal/--sar` come from `env(safe-area-inset-*)`; every screen pads by
-them and both the action tray and the caption toast add `--sab` to their bottom offset, so the
-tray never sits under a home indicator. `viewport-fit=cover` is set in the head.
-
-**Never cut off:** the action tray and hand strip (they wrap rather than scroll horizontally), the
-turn/deck/score badges, the results table, and the objective sentence. Buttons are ≥44×44 px.
+**Layouts** (by the window's logical size): **wide** (≥ 1024 px) keeps both rails beside the table;
+**compact** puts the rails behind ☰ / ⋯ as sheets above the tray (scrolling past half the height);
+**short landscape** (≤ 500 px tall, < 1024 px wide) packs the HUD into one band, stands the tray as a
+two-column block on the right (key hints left out; they stay in Help) and runs the hand (44 × 60
+cards) under the table. In every layout the table is framed in the band the HUD, the tray and the
+hand leave (`setViewOffset`). Panels scroll inside when taller than the window; the runtime's
+interface size scales everything on large screens; safe areas pad every edge. Nothing is cut off at
+390 × 844, 844 × 390 or desktop sizes: the tray and hand wrap, the HUD badges wrap, the results table
+sizes its columns to its headings.
 
 ---
 
@@ -341,99 +350,53 @@ cards with a 0.7 × 1.0 footprint, ring markers for layoff targets, cone pendant
 fixed by `FRAMING`: hand at z 3.4, melds at 0.4, opponents at −1.2 and back, stock and discard
 at −2.6, camera at (0, 7.2, 6.4) with a 42° field of view looking at (0, 0, 0.6).
 
-**Typography.** System UI stack (`"Segoe UI", system-ui, sans-serif`) throughout; card faces are
-drawn into a 128×184 canvas with bold 64 px rank and 44 px suit glyph. Larger text scales the
-whole body to 120%.
+**Typography.** The UI uses the runtime's sans-serif face; the baked card faces use the bold serif
+rank and suit glyph drawn at 256 × 368 px per card. The runtime's text-size and interface-size
+options scale the UI.
 
-**Motion.** Cards ease toward their target position and selected cards hover; the meld burst is
-32 particles with gravity. Reduced motion (`settings.reducedMotion`, forwarded to
-`scene.reducedMotion`) snaps positions instead of easing and suppresses idle drift; the CSS
-selection lift and the DOM layout remain, so nothing becomes ambiguous when motion is off.
+**Motion.** Selected cards hover with a gentle bob; the meld burst is 32 particles with gravity; the
+lamp light shimmers and dust drifts through it. The runtime's reduced-motion option stops the bob,
+the shimmer, the drift, the burst and the title's lamp glow.
 
-**Graphics.** The renderer uses ACES filmic tone mapping with sRGB output; theme colours and
-canvas textures are converted to linear so the felt, wood and card inks show their authored
-colours. A warm key directional light (the only shadow caster, PCF soft shadows with the shadow
-box fitted to the table top) is joined by a hemisphere fill and a faint ambient term. Optional
-effects: key-light shadows, SSAO contact darkening under cards and around the rim, bloom limited
-to lamp bulbs, the selection glow and meld sparks (threshold 0.88), a colour grade (gentle
-S-curve, warm highlights / cool shadows) with vignette, FXAA/SMAA/MSAA, image-based reflections
-from a PMREM-filtered `RoomEnvironment` (clearcoat on card faces and backs, a brass inlay ring,
-polished rim), and a detailed hall (procedural felt fibre, wood-grain rim, plank floor, wall
-panels, pendant lamps with glowing bulbs and a warm pool light, exponential fog, rounded card
-slabs, larger corner indices) versus a plain hall (flat materials, box cards). Particles are the
-meld burst (up to 32 or 64 sparks) plus, at High, dust motes drifting through the lamp light.
-Ambient motion — lamp shimmer, dust drift, a gentle bob on selected cards and a slow lamp glow over
-the title key art — stops under the Reduced motion setting or `prefers-reduced-motion`. At the
-detailed level the DOM layer picks up matching depth (paper-gradient hand buttons, soft panel and
-tray shadows, brass hairlines) without changing any colour the player reads; high contrast turns
-it off. The post chain is RenderPass (or SSAOPass) → UnrealBloom → grade/output (linear → sRGB)
-→ SMAA/FXAA, on half-float targets (multisampled for MSAA); it is built only when something needs
-it, so Low renders straight to the canvas, and if it cannot be built the table renders without it
-and the panel says so.
+**Graphics.** ACES filmic tone mapping at exposure 1.15 with sRGB output; theme colours are sRGB.
+A warm key directional light (the only shadow caster) with a hemisphere fill and a faint ambient
+term; on detailed looks the pendant lamps' warm pool (a point light). Per quality tier (the
+runtime's Options › Graphics: `frame().quality`, `native/quality.ts`; the old presets and budgets):
 
-The Settings overlay's **Graphics** section offers: Quality (`#set-quality`: Auto (detected:
-<tier>), Low, Balanced, High, Ultra) — Auto comes from the StarHermit hardware level (below); a render scale slider
-(`#gfx-scale`, 50–200% of the preset's); one select per category (`#gfx-cat-<name>`,
-`data-gfx-cat`) defaulting to "From preset (<tier>)" — shadows off/low/medium/high (512–2048²
-map), ambient occlusion off/on/high (16 or 32 SSAO samples), bloom, colour grade, anti-aliasing
-off/FXAA/SMAA/MSAA, reflections, table detail plain/detailed, particles off/low/high; Adaptive
-resolution (`#gfx-adaptive`, on by default: every 90 frames, an average above 26 ms steps the
-resolution down 10% to a floor of 60%, below 14 ms steps it back up 5%); Show frame rate
-(`#gfx-show-fps`, a bottom-left readout that never takes pointer input); and a summary line
-"GPU · Level N · cost summary · W×H px" ("Level" localized). Choosing a preset clears the overrides. Presets: Low = 80% scale,
-pixel ratio ≤ 1, context MSAA, no shadows/post, plain hall, sparks only (as cheap as the original
-game); Balanced = ratio ≤ 1.5, 512² shadows, bloom, grade, FXAA, reflections, detailed hall;
-High = ratio ≤ 2, 1024² shadows, SSAO, SMAA, dust motes; Ultra = 125% scale, 2048² shadows, full
-SSAO. Changes apply immediately and are stored in `settings.graphics` inside
-`meldhall.settings.v1` (an old `quality` value migrates to the matching preset); the resolved
-preset is mirrored on `body[data-gfx-preset]`, `body[data-gfx-detail]` and `#gl[data-gfx-preset]`.
-
-**Hardware-level detection.** `src/gpu-level.js` (shared StarHermit copy, `StarHermitGpu`) rates the
-WebGL unmasked renderer plus device facts (`detectSystem()`: phone/tablet, cores, memory, screen) on
-the StarHermit hardware level 0–20 (0 = Galaxy S20 / Intel UHD or weaker, every software renderer and
-no WebGL; 20 = RTX 5090; each level ≈ 1.23×; laptop parts two levels below desktop; phones, tablets
-and ≤ 4 GB machines capped at 9). `gfx.js` maps it with `presetForLevel(level, { low: 0, balanced: 4,
-high: 10, ultra: 17 })`, so Auto picks Ultra on strong GPUs; adaptive resolution still steps down when
-slow. Headless SwiftShader is level 0 → Low. Phones and tablets pace Auto FPS at half the display
-refresh rate ("Auto (half refresh rate)") and start at 16 simultaneous sounds (shared
-`game-options.js`).
-
-**Per-preset budgets** (`BUDGETS` / `budgetFor` in `src/gfx.js`). Each preset holds 60 FPS on the
-weakest GPU Auto gives it — Low at level 0, Balanced 4, High 10, Ultra 17. Cards, pick targets and
-rules are identical on every preset; only visuals change. The mote count is tuned at the floor level
-and scales up within the preset on faster GPUs (`StarHermitGpu.scaleBudget`, ≤ 2×, at most 400).
-
-| Budget | Low | Balanced | High | Ultra |
+| | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
-| Shading model (hall, table, cards) | Lambert | Standard | Standard + Physical (clear-coated card faces) | as High |
-| Procedural floor texture (felt ½, wood rim 2× wide × ⅛ tall) | 128 px | 256 px | 512 px | 1024 px |
-| Table rim/felt segments (detailed hall) | 32 | 48 | 96 | 128 |
-| Dust motes (Particles high + detailed hall) | 40 | 70 | 140 | 200 |
-| Sparks per burst (Particles high; low: half) | 24 | 40 | 64 | 96 |
-| Bloom resolution | ½ | ½ | ½ | full |
+| Shadows (key light map) | off | 512 | 1024 | 2048 |
+| Ambient occlusion | off | off | on (8 samples) | high (16) |
+| Bloom (lamp bulbs, selection glow, sparks) | off | on, ½ res | on, ½ res | on, full res |
+| Colour grade + vignette | off | on | on | on |
+| Anti-aliasing | MSAA | FXAA | SMAA | SMAA |
+| Reflections (`RoomEnvironment` + PMREM) | off | on | on | on |
+| Hall | plain (flat materials, box cards) | detailed | detailed | detailed |
+| Shading | Lambert | Standard | Physical (clear-coated card faces and backs) | Physical |
+| Floor / felt / wood textures | — | 256 / 128 / 512 × 32 | 512 / 256 / 1024 × 64 | 1024 / 512 / 2048 × 128 |
+| Rim / felt segments | 48 | 48 | 96 | 128 |
+| Particles | sparks (≤ 12) | sparks (≤ 20) | sparks (≤ 64) + dust motes (140, ≤ 2× by level) | sparks (≤ 96) + motes (200, ≤ 400) |
 
-Changing preset rebuilds the hall and card materials live when the shading model, texture size or
-segments change.
+The detailed hall adds the textured plank floor, wood-grain rim and felt fibre, the brass inlay ring,
+wall panels, pendant lamps with glowing bulbs, exponential fog and rounded card slabs. Bloom runs on
+the light before tone mapping in the runtime (three.js r137 bloomed after it), so its threshold is the
+old 0.88 taken back through the curve (1.6). The runtime owns Auto (the device's graphics level),
+render scale, the pixel-ratio cap, adaptive resolution, the frame-rate limit and readout; the old
+per-effect overrides are not offered. A change of tier applies at once (materials and the hall are
+rebuilt, the table kept).
 
-**Benchmark** (`node tools/gfx-bench.mjs meld-hall`; hook `tests/gfx-bench.mjs` picks the preset in
-Settings → Graphics and plays a 4-player Practice match through the visible draw / meld / lay off /
-discard buttons and hand cards, pressing Next or Replay at the results). Measured 2026-10-17 (GPU ms
-above the draws-skipped floor, projected to the preset's floor level; CPU p90 on the RTX 5090 run):
-
-- Desktop 1920×1080: PASS low (typical 1.27 / slow 0.84 ms GPU, CPU 0.70 ms); PASS balanced (5.10 /
-  5.37, CPU 0.80); PASS high (3.68 / 4.98, CPU 1.10); PASS ultra (2.39 / 2.78, CPU 1.10).
-- Mobile 390×844 @3×: PASS low (0.00 / 0.31, CPU 0.50); PASS balanced (0.00 / 0.07, CPU 0.70).
-
-**Hero of the screen.** The felt between the meld row and the hand row — the melds are what the
-player reads, so the camera centres slightly behind them and the lamps pool light there.
+**Textures.** The browser build painted its card faces, card backs (with the authored back art), felt,
+wood rim and floor with per-pixel canvas grain at start-up; they are baked once with that same code
+in Chrome (`tools/bake-textures.mjs`) into `assets/textures/` — one 13 × 4 face atlas and a back per
+theme — and each card shows its face by its own top-face UVs into the atlas.
 
 **Authored images.**
 
 | Asset | Role |
 |---|---|
-| `assets/hall-keyart.webp` | Title backdrop under a 72–88% dark scrim; suppressed in high contrast |
-| `assets/results-still.webp` | Banner at the top of the results panel, decorative (`alt=""`), hidden in high contrast, `onerror` self-hides |
-| `assets/card-back.webp` | Composited at 85% over the procedural card back inside `makeBackTexture`; if it fails to decode the procedural back stands unchanged |
+| `assets/hall-keyart.webp` | Title backdrop under a 72–88 % dark scrim; suppressed in high contrast |
+| `assets/results-still.webp` | Banner at the top of the results panel, decorative, hidden in high contrast |
+| `assets/card-back.webp` | Composited at 85 % over the procedural card back, baked into `assets/textures/backs.webp` |
 
 ---
 
@@ -443,18 +406,16 @@ player reads, so the camera centres slightly behind them and the lamps pool ligh
 loudest event in the game is the match-win fanfare and it is still restrained. Sound never carries
 information that is not also on screen — each cue has a caption string.
 
-**Buses.** `music`, `effects`, `ambience`, `voice` gain nodes feed a master gain; each is set
-independently from settings (defaults 0.5 / 0.8 / 0.4 / 0), and `muted` zeroes the master.
-Hiding the tab ducks the master to 0 and restores it on return. The context is created lazily on
-the first user gesture (`Audio.ensure` on any button click or canvas pointerdown).
+**Buses.** The runtime's buses and Options › Audio own the volumes, mute and the voice limit: the
+effects play on *effects*, UI clicks on *interface*, the room tone and the chord pad on *music* (the
+runtime has no ambience bus). Clips load one at a time once the mixer runs (natively at once, in a
+browser after the first press); a clip still loading is silent (the browser build's synthesized
+fallback blips are not ported: a live synthesis graph makes clip loads fail on the web runtime).
 
-**Music and ambience.** Procedural, not sampled: a four-chord triangle-wave pad advances every 3 s,
-and `setMusicIntensity` (driven by table meld count / 6) raises both its pitch offset and level as
-the table fills. Ambience is a looping 2-second noise buffer through a 220 Hz low-pass — hall room tone.
-
-**Effects.** One-shots are Opus samples fetched lazily from `sfx/` after unlock, decoded once and
-cached; events with two clips rotate between them. Every event keeps a synthesized fallback that
-plays while a sample is still loading or if the fetch fails, so the game is never silent.
+**Music and ambience.** Rendered once into looping clips a slice a frame: the four-chord triangle
+pad (one chord every 3 s, each swelling in over 0.8 s and out by 3.2 s; a 12 s loop) and the hall's
+room tone (noise through a 220 Hz low-pass, a 2 s loop). The pad's level rises with the melds on the
+table (×1 to ×2 at six melds); its pitch no longer rises with it.
 
 ### SFX event table
 
@@ -469,232 +430,157 @@ Canonical copy: `sfx/manifest.txt`. Generator input: `sfx/manifest.json`.
 | `layoff` | `layoff-tap.opus` | Card tapped and slid beside others | A card extends an existing meld |
 | `discard` | `card-discard.opus` | Card tossed onto a pile | End-of-turn discard |
 | `turn` | `turn-chime.opus` | Small bell on a wooden mallet | Turn returns to the human seat |
-| `deal` | `deal-round.opus` | A row of cards dealt onto felt | A session is attached, and on *Next round* |
+| `deal` | `deal-round.opus` | A row of cards dealt onto felt | A match starts, and on *Next round* |
 | `hint` | `hint-shimmer.opus` | Two rising glass bell tones | Hint button or **H** |
 | `roundWin` | `round-win.opus` | Brass bell cascade with a harp gliss | Results: the human took the round, match continues |
 | `roundLose` | `round-lose.opus` | Three descending marimba notes | Results: an opponent took the round or the match |
 | `matchWin` | `match-win.opus` | Restrained brass-and-harp fanfare | Results: the human reaches the target score |
 | `achievement` | `achievement-chime.opus` | Glockenspiel with a ringing tail | Each achievement unlocked; lesson completion |
-| `ui` | `ui-click.opus`, `ui-confirm.opus` | Wooden click / tick | Menu buttons and settings commits |
+| `ui` | `ui-click.opus`, `ui-confirm.opus` | Wooden click / tick | Mode and option picks |
 
-**Captions.** With *Captions for sounds* on (default), every event above except `ui` pushes its
-caption into `#caption-toast` for 1.8 s, positioned above the tray in play and clear of the safe area. On menus and results it sits at the bottom edge, and the results screen pads its bottom so the caption never touches the panel.
+**Captions.** With *Captions for sounds* on (default), every event above except `ui` shows its
+caption for 1.8 s above the tray in play, at the bottom edge elsewhere.
 
 ---
 
 ## 10. Localization
 
 **Languages:** en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — every player-facing
-string (title, mode select, HUD, rails, action tray, hand and meld labels, hints, rejection reasons,
-results, help, pause, settings, compat notice, lessons, challenges, achievements, sync status, captions)
-ships in all nine. Card faces use rank letters and suit glyphs and need no translation.
+string (title, mode select, HUD, rails, tray, hand and meld labels, hints, rejection reasons, results,
+help, pause, settings, lessons, challenges, achievements, sync status, captions, account lines) ships
+in all nine. Card names use rank letters and suit glyphs and need no translation.
 
 **Where strings live:** `src/strings.js` holds the tables keyed by the English source text (en-GB,
-es-ES and fr-CA list only their differences — *Colour palette*, *Ajustes*, *pointage*). `src/i18n.js`
-translates the static `index.html` markup in place (text nodes and `aria-label`/`title`; `<kbd>` keys and
-`data-i18n-skip` elements are left to code) and exposes `T()`; `src/ui.js`, `src/platform.js` and
-`src/audio.js` build text through it, and `src/content.js` marks its lesson/challenge/achievement texts
-as keys. The Graphics section (`src/gfx-ui.js`) and the account strings (`src/sh-strings.js`) are
-looked up in the same current language. "Meld Hall" and "StarHermit" stay untranslated.
+es-ES and fr-CA list only their differences — *Colour palette*, *Ajustes*, *pointage*); `src/i18n.js`
+is the pure lookup; `src/sh-strings.js` the account strings. `native/i18n.ts` picks the locale from the
+runtime's interface language (`preferences().language`: Options › Language, else the account's
+preferred language, else the device's; es-MX → es-419, en-AU → en-GB, fr → fr-FR, pt-PT → pt-BR) and
+follows a change at once: every string is drawn through `T()` each frame. "Meld Hall" and
+"StarHermit" stay untranslated. The browser build's own Language setting (`sh-language.js`, its
+`ui.language` account key) is replaced by the runtime's Options; the old key is removed.
 
-**Language setting:** Settings → **Language → Game language** (rendered inside the Settings overlay
-by the shared `game-options.js` from the `sh-language.js` instance) offers **Automatic — <resolved
-language>** plus the nine locales by native name, with a status line (Saved to account / Saved on this
-device / Account sync unavailable). It is reachable from the title and mid-match (Pause → Settings). A
-change applies immediately without restarting the match: the markup is re-translated,
-`document.documentElement.lang` is set, `mh-language` fires, and the title, mode select, HUD, rails,
-hand, results, help, Graphics box and account buttons re-render in place.
-
-**Resolution order** (`sh-language.js`): explicit game choice → for Automatic, the StarHermit
-account's `preferredLanguage` (`GET /api/v1/me/language`, signed in only) → `navigator.languages` →
-en-US, mapping tags to the nearest shipped locale (es-MX → es-419, en-AU → en-GB, fr → fr-FR,
-pt-PT → pt-BR). The choice (`auto` or a locale) is stored per player in
-`localStorage['meld-hall.language.<user|guest>']` and, signed in, in the per-player settings key
-`ui.language` as `{ choice }`; a failed settings read never overwrites it and the game never writes the
-platform preference. `?lang=<tag>` forces a locale for the page load (QA links) and hides the selector.
-
-**Expansion:** panels are `max-width: 70ch` and the tray wraps, so a 30–40% expansion in German or
-French costs height, never clipping.
+**Expansion:** panels cap at 680 px and wrap, the tray and HUD badges wrap, so a 30–40 % expansion in
+German or French costs height, never clipping.
 
 ---
 
 ## 11. Accessibility
 
-- **Keyboard-only path.** Title → mode → play → results → title is fully operable with Tab, arrows
-  and Enter. Within play, ←/→ walk the hand list and Enter/Space toggle selection; D/F/M/L/X/U/H
-  bind the tray. Focus moves to the first control of each screen on entry and is restored after an
-  overlay closes.
-- **Focus visibility.** 3 px `#7fc4ff` outline with 2 px offset on every focusable element,
-  `#00ffff` in high contrast.
-- **Live regions.** `#live-region` (polite) carries turn changes, hints, lesson completion, results
-  headlines and replay verification; `#error-region` (assertive) carries rejection sentences.
-  The hand is a real `role="listbox"` with `aria-multiselectable`, and each card button reports
-  `aria-selected` and a label of the form "Q♥, value 10". The hand buttons and meld chips are
-  updated in place after every AI command and rebuilt only when your cards or the table melds
-  change, so a card clicked while a rival plays still toggles and keyboard focus stays on it.
-- **Colour.** Suits carry glyphs as well as colour. Three colour-vision palettes shift the accent
-  and the red-suit ink (`#14568f` for deuteranopia/protanopia, `#b03a2e` for tritanopia).
-- **Captions** are on by default for all non-UI sounds.
-- **Reduced motion** removes easing, drift and the burst; **larger text** scales the body to 120%;
-  **high contrast** replaces the palette and drops both decorative images.
-- **Targets.** All buttons are at least 44×44 px, including the hand cards (52×72).
-- **3D failure is not a failure.** If the WebGL context cannot be created, `#compat-message`
-  appears and the game remains completely playable through the DOM hand list, meld chips and tray.
+- **Keyboard and gamepad.** Title → mode → play → results → title is operable by Tab / arrows /
+  Enter or the pad's D-pad and South; in play the action keys and pad controls of section 6. Focus
+  moves to each screen's first control on entry.
+- **Focus visibility.** A 3 px `#7fc4ff` ring (2 px offset) on every focusable widget, `#00ffff` in
+  high contrast.
+- **Screen readers.** Every widget is in the runtime's accessibility tree with its role and name: the
+  hand's cards are toggles named "Q♥, value 10" (pressed when selected), the meld chips name their
+  cards, the deck and discard pile on the table are named targets. Turn changes, hints, lesson
+  completion, results headlines and replay checks are announced politely; rejections assertively.
+- **Colour.** Suits carry glyphs as well as colour. Three colour-vision palettes (the game's own
+  option) shift the accent and the red-suit ink (`#14568f` for deuteranopia/protanopia, `#b03a2e` for
+  tritanopia).
+- **Captions** are on by default for all non-UI sounds; **haptics** can be turned off.
+- **The runtime's options:** reduced motion (section 8), larger text and interface size, high
+  contrast (the old black/white palette with a gold accent; decorative images hidden).
+- **Targets.** Buttons are at least 44 × 44 px, the hand cards 52 × 72 (44 × 60 in short landscape).
 
 ---
 
 ## 12. StarHermit integration
 
-`starhermit.txt` declares `name=Meld Hall`, `launch=index.html`, `owner`, `server=score-script.js`,
-`cover=coverart.png`, per https://wiki.starhermit.com/ conventions.
+`starhermit.txt` declares `name=Meld Hall`, `owner`, `server=score-script.js`, `cover=cover.jpg`,
+`launch=index.html` (the engine's web loader), the `engine.*` lines and the controls.
 
-**Used today**
-
-- *Platform script.* `score-script.js` is the declared platform script (leaderboard posting, below).
-  `server.js` is the local dev server: it hosts the static bundle
-  (refusing dotfiles and `node_modules`, with a normalized-path traversal guard) and exposes
-  `GET /api/v1/health` → `{ok, rules}`.
-- *Standalone.* Without a launch token the client makes no own-server request (no time probe,
-  no `/ws` hosted tables, no health check); the daily day comes from the local clock.
-- *Platform time.* Signed in only, `GET /api/v1/time` (via `StarHermit.api`) → `{now}` is
-  round-trip-corrected into `UI.serverOffset` for the daily day.
-- *Shared SDK.* All platform calls go through `starhermit-sdk.js` (loaded first) via
-  `src/platform.js`; without a launch token nothing calls the platform.
-- *Launch token + renewal.* `StarHermit.init()` reads `#game_token=` (library launch) or
-  `#access_token=` (sign-in return) once, strips it and renews it before expiry. If renewal is
-  refused the game toasts "signed out", hides the invite button and keeps playing locally.
-- *Sign-in.* On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**;
-  hidden when signed in and when running locally.
-- *Identity.* The profile line reads "Playing as \<nickname\>" (profile `nickname`, fallback
-  `Player <id prefix>`; never `/api/v1/me`, never usernames) plus a sync status
-  (syncing/saving/synced/offline).
-- *Cloud save.* Progress mirrors to the `game:<slug>` cloud-save slot through
-  `StarHermit.loadJSON`/`saveJSON`, so every write after a load is conditional on the version read.
-  At boot the cloud copy is **merged** with this device's progress (absent = keep local): the further
-  `journeyUnlocked`, the union of cleared stages, dailies played and achievements, the larger
-  `masteryCleared` and career counters (melds, rounds, win streak, best streak); the merge reseeds the
-  local cache and is written back when it adds anything. When another device saved first the SDK
-  refuses the write and emits `saveconflict`; the game reloads the cloud copy, merges it the same way,
-  refreshes the title and saves the merge. Saves debounce 2 s and flush with keepalive on
-  `pagehide`/tab hide. `meldhall.save.v1` localStorage remains the offline cache.
-- *Language.* Automatic follows the account's preferred language; an explicit choice is saved as the
-  per-player setting `ui.language` (section 10).
-- *Report a problem.* Settings shows a **Report a problem** section to signed-in players (from
-  `game-options.js`): a title and optional details filed through `StarHermit.reportBug` with a small
-  non-personal `context.json` (viewport, language, FPS cap, audio limit). Uncaught errors are filed as
-  crash reports through `StarHermit.captureCrashes` (SDK-capped).
-- *Settings KV.* Every preference except key bindings (volumes, mute, captions, motion, contrast,
-  text size, palette, left-handed, haptics, graphics, tutorial flags …) is patched to the
-  per-player settings store on change (changed keys only); at boot stored values override local ones.
-- *Controls.* `starhermit.txt` lists one `control.<action>=<Code> | <Label>` line per keyboard
-  action; keyboard input is routed by `event.code` through `StarHermit.loadBindings()` and the
-  Help controls list shows the effective keys.
-- *Invite link.* Signed-in players get **Invite a friend** on the title, copying
-  `StarHermit.inviteLink()` with a confirmation toast.
+- *Player.* `player()` from `starhermit:platform`: the profile line reads "Playing as \<display
+  name\> — progress \<syncing… / saving… / synced to your account / offline — saved on this device\>";
+  signed out, "Guest profile — progress is saved on this device." and a **Sign in with StarHermit**
+  button (`requestSignIn`). A session that ends toasts "signed out" and play goes on locally.
+- *Save.* The progress document (journey unlock and clears, mastery count, dailies, achievements,
+  career counters) is the engine save (`saves`, on the device and in the account's cloud slot), the
+  same plain JSON the browser build mirrored to `game:<slug>`. `session.js` reads and writes it
+  through a `localStorage` stand-in (`native/platform.ts`) with its checksummed envelope. A save from
+  another device merges in (`saves.onStatus`, `saves.onConflict` → `src/store.js mergeProgress`: the
+  further unlock, the union of clears, dailies and achievements, the larger counters). The browser
+  build's slot shows as foreign: it is merged with this device's progress and replaced once
+  (`saves.foreign()` + `replaceForeign`). Guests' old browser `localStorage` progress cannot migrate.
+- *Settings.* The game's own options (captions, haptics, colour palette, left-handed tray, lessons
+  seen) are engine `settings` under the same keys; the browser build's values in the account's
+  settings KV are adopted (unless set here since), then every key it wrote there is removed (volumes,
+  mute, graphics, motion, contrast, text size, bindings, `ui.language` — now the runtime's Options).
+  Key bindings are the runtime's (renamed actions: `draw_deck`, `draw_discard`, `camera_reset`; old
+  custom bindings of the camelCase actions do not carry over).
+- *Clock.* The Daily's UTC day comes from the platform's clock (`serverNow()`), else the device's.
+- *Invite link.* Signed in, **Invite a friend** copies the platform invite link (clipboard capability)
+  with a toast.
 - *Leaderboard posting.* Signed in, every finished match except lessons posts the player's match
-  total once through `StarHermit.submitScores` (a practice session whose `score-script.js` posts
-  it to the `high-score` board "Match score", integer, higher is better, 0–1000), and the results
-  screen shows "Leaderboard rank: #N" (or posted / not posted). Round results post nothing;
-  standalone posts nothing and shows no line.
-- *Leaderboard on daily results.* Daily results also list the top 10 of the game's first platform
-  board (`StarHermit.leaderboard()`, names via profiles); personal bests stay in the save doc.
+  total once through `score-script.js` (a practice session whose socket carries `{ type: 'result',
+  scores: { 'high-score': total } }`; the script range-checks it, 0–1000, and posts it to the "Match
+  score" board) and the results show "Leaderboard rank: #N" (or posted / not posted). Rounds post
+  nothing; guests post nothing and see no line. Solo scores keep the score script's range check
+  (no server replay); there is no multiplayer to referee.
+- *Daily board.* Signed in, the Daily's results list the board's top ten (display names); personal
+  bests stay in the save.
 
-**Not used**
-
-Platform matchmaking/chat/replays (`score-script.js` only posts scores), presence, telemetry/activity and server-side achievement sync — achievements and career stats
-stay local (inside the cloud-saved progress doc), and the local funnel is never transmitted.
-Realtime-rooms
-matchmaking/friends invites are not used. The legacy hosted-table `/ws` backend in `server.js`
-is no longer reachable from the client (it only ever worked against the dev server), so the
-Hosted mode was removed.
+**Not used:** rooms, matchmaking, chat, presence, platform achievements (achievements and career
+stats stay in the save), telemetry (the browser build's local funnel is not ported). The old local
+dev server (`server.js`, with an unreachable hosted-table `/ws` backend) is gone.
 
 ---
 
 ## 13. Technical architecture
 
-**Module graph.** `rules.js` and `content.js` depend on nothing; `platform.js`
-depends only on browser globals (all guarded, so it loads in Node for tests); `session.js` depends on rules+content; `audio.js` and `render.js` are leaves; `ui.js`
-composes rules/content/session/audio/platform; `main.js` wires ui ↔ render and owns the
-browser lifecycle. Every module is a UMD factory, so `tests/run.js` requires the engine in plain
-Node with no build step and no dependencies.
+**Module graph.** `rules.js` and `content.js` depend on nothing; `session.js` on both; `store.js` on
+nothing; the string tables on nothing. `native/classic.ts` loads them as classic scripts
+(`loadClassic`), so `tests/run.js` runs the very code the client runs, in plain Node. `native/main.ts`
+owns the app state and wires `screens.ts` (UI), `render.ts` (table), `audio.ts`, `platform.ts`.
+
+**Time.** The runtime's fixed steps (60/s) drive a clock the AI's think time runs on (`session.js`
+`setTimers`, 900 − 200 × difficulty ms, at least 250); a paused game, a hidden window and slow frames
+never move the table, and play scripts replay exactly. Widget presses run after the frame's UI is
+built (`later`); table taps are decided then too.
 
 **Determinism and replay.** All hidden information derives from one 32-bit seed. `buildReplay`
-emits `{schema, rulesVersion, seed, options, commands, hashes, terminal}`; `verifyReplay` re-runs
-the command list from `initialState` and compares hashes position by position, so a tampered hash
-is detected at its index. The results screen's *Replay* button runs this and announces the outcome.
+emits `{schema, rulesVersion, seed, options, commands, hashes, terminal}`; `verifyReplay` re-runs the
+commands and compares hashes, so a tampered hash is detected at its index. The results' *Replay*
+button runs it and shows the outcome.
 
-**Persistence.** `meldhall.settings.v1` and `meldhall.save.v1` in localStorage, each wrapped as
-`{v:1, data, checksum}`; a version or checksum mismatch returns the defaults. All storage access is
-inside try/catch, so private-mode browsers degrade to an in-memory session.
-
-**Performance budgets.** The scene is rebuilt wholesale on every state change — at most ~60 card
-meshes, which is cheap; card face textures are cached per card id in `faceTextures` and the box
-geometry is shared. Particles are a single preallocated `Points` buffer sized by tier and excluded
-from raycasting. Render scale and pixel ratio are clamped per tier (0.8–2.0). The loop stops
-entirely when the tab is hidden or the screen is not `play`. Resize is debounced 80 ms;
-orientation change re-resizes after 200 ms.
-
-**Local funnel.** `main.js` keeps an in-memory, anonymous ring buffer (200 entries) of
-`start`, `settings_change`, `tutorial_step`, `round_end` and `error` events. Nothing is transmitted.
-
-**How the e2e drives the real UI.** `tests/e2e.mjs` serves the repo on an ephemeral port (refusing
-`tests/`, `tools/` and dotfiles), then clicks visible DOM: menu buttons, mode buttons, the `<select>`
-for target score, `.card-btn` elements in the hand list, and the action tray — plus one turn driven
-purely by key presses. It reads `window.MeldUI.session` only to decide *which* visible element to
-click and to wait for the AI, never to mutate state.
+**Performance.** The table's cards are rebuilt on every state change (≤ ~60 meshes) from geometry
+cached per card face and one face material; particles are one preallocated `Points` buffer per tier.
+Static textures are baked images; the audio loops render a slice a frame.
 
 ---
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `tests/run.js` (62 tests, no dependencies) then `tests/i18n.test.mjs` (4 tests: every
-markup/code key translated in all nine locales with placeholders intact, lesson/challenge/achievement
-texts, live switching, Graphics/account strings):
+`npm test` runs:
 
-- meld validity, card values, sub-run enumeration, deal shape and per-seed determinism;
-- rejection paths (out of turn, malformed, double draw, discard before draw, bad meld shape,
-  bad layoff, layoff onto a full set), no mutation on failure, idempotent duplicate ids;
-- going out, the deadwood award, breakdown contents, match termination, `nextRound` carry-over,
-  serialize/deserialize round trip and version rejection;
-- golden matches across seeds and 2/3/4 seats reach `matchOver`; replay determinism as a property
-  test plus tampered-hash detection; 2000 malformed commands rejected cleanly; no NaN in scores;
-- content: 40 stages pass `validateStage` and are playable, mastery every fifth, daily seeds
-  immutable within a UTC day, five unique themes, lowercase achievement keys, actionable lessons;
-- session: undo in practice, none in journey, stage/content agreement, lesson completion,
-  idempotent achievements.
-- graphics: hardware level → preset (SwiftShader/llvmpipe/no WebGL, AMD Radeon Graphics and Intel UHD
-  → Low, Iris Xe → Balanced, GTX 1070 → High, RTX 4080/5090 → Ultra, phones such as Adreno 740 capped
-  at Balanced), the per-preset budget table (explicit, non-decreasing, floor-level tuned, scaling with
-  the level),
-  `resolve` with preset/override/scale clamp, choosing a preset clears overrides, Graphics panel
-  strings complete in all nine locales.
-- platform: token, nickname, cloud save with ETags, settings KV, bindings, invite, no fetch standalone,
-  sign-in only on a `<uuid>.starhermit.com` host, boot merge of cloud + local progress, a 412 save
-  conflict reloaded, merged and saved again.
+- `tests/run.js` (52 tests): meld validity, card values, sub-run enumeration, deal shape and
+  per-seed determinism; rejection paths and no mutation on failure; going out, scoring, match end,
+  `nextRound`, serialization; golden matches across seeds and seats; replay determinism and
+  tamper detection; 2000 malformed commands; content validation (40 stages, mastery every fifth,
+  dailies, themes, achievements, lessons); session undo / lesson / progression; the injected AI timers.
+- `tests/store.test.mjs`: the old cloud slot migrates, two devices merge without losing either side,
+  session.js's envelope round-trips through the stand-in, options are validated and every old
+  settings-KV key is removed.
+- `tests/i18n.test.mjs`: every key `native/*.ts`, the content and the captions use is translated in
+  every locale with placeholders intact and no stale rows; the account lines; locale switching.
+- `tests/native.mjs`: the web index is current, `tsc` passes, `starhermit check .` has no warnings,
+  and the `tests/native/*.play` scripts (generated by `tools/gen-plays.mjs`, the seated player played
+  by the rules' AI) drive the real UI offscreen (`--render-check`):
+  - `menus.play` (desktop): How to Play, Settings (left-handed tray), the mode select with a Practice
+    target, a Practice turn (draw, undo, hint, a keyboard pick), pause, Help from pause, Settings from
+    pause, leaving; Learn's first lesson;
+  - `journey-1.play` (desktop): Journey stage 1's first round to its results with the first draw by a
+    click on the deck on the table, Next round, pause, leave;
+  - `full-hall-phone.play` (390 × 844 @3): the Full Hall challenge via the mode select, both sheets,
+    the whole four-player match to "Opponent 4 wins the match.";
+  - `low-deadwood-landscape.play` (844 × 390 @3): the Low Deadwood challenge to the match's end, Replay
+    verified, leave.
 
-`npm run test:e2e` → `tests/e2e.mjs` at 1280×800 and 390×844 (touch), failing on any console error
-or page error other than the known SwiftShader/GL noise: title loads → settings open/close → help
-open/back → Graphics settings (Low then High applied, a shadows override reflected in the summary, which shows "Level 0",
-both surviving a reload, Auto clearing the override and resolving to Low under SwiftShader) →
-**Language** (own signed-in context, stubbed StarHermit API: Automatic resolves to fr-CA from
-`GET /api/v1/me/language`; a practice match starts in French; Pause → Settings → Italian re-renders the
-settings, Graphics box, pause overlay, HUD and action tray in place and PUTs `ui.language`; Report a
-problem posts to `/reports`; back to Automatic) → Play → practice at target 30 → hand dealt into the accessible list → a full round played
-by clicking cards and tray buttons, exercising Hint and Undo → results → Next round → a second round
-including a keyboard-only turn → pause/resume plus settings mid-match (Ultra's full post chain rendered live, then Auto) → progress verified in
-localStorage → leave to title.
-
-**QA bar, as checkable statements.**
-
-1. Every implemented feature is reachable by clicking what is on screen — the e2e reaches results
-   twice per viewport without touching an internal API.
-2. No console errors or warnings at either viewport; the e2e fails on one.
-3. Nothing is cut off at 390×844 portrait or at desktop: the tray and hand wrap, rails become sheets,
-   safe-area insets pad every edge.
-4. A first-time player is taught: Learn requires the action it describes, How to Play states the four
-   rules, and illegal actions are explained in words.
-5. Rules, hints, AI and server agree because they call the same functions.
-6. `node --check` passes on every first-party JS file.
+`npm run test:browser` (`tools/browser-play.mjs`) plays Journey stage 1's first round into round 2 in
+GPU Chrome on the packaged loader at desktop (mouse, D key, a click on the 3D deck), phone (DPR 3)
+and phone landscape (DPR 3) by finger taps (CDP touch, including a tap on the 3D deck), failing on any
+console error or warning or the runtime's error screen. `npm run package` regenerates the loader and
+index after every change.
 
 ---
 
@@ -706,8 +592,9 @@ localStorage → leave to title.
 | `assets/results-still.webp` | Results panel banner | FLUX.2 klein, seed 25514, 1024×576 → WebP q80 (45 KB) | generated in this pass, wired |
 | `assets/card-back.webp` | Card back art over the procedural back | FLUX.2 klein, seed 41207, 512×512 → WebP q85 (139 KB) | generated in this pass, wired |
 | `coverart.png` | Platform cover, 1200×675 | prior pass | shipped |
-| `icon.png`, `favicon.svg` | Platform icon and tab icon | prior pass | shipped |
-| Card faces, backs, felt, wood, lamps | All in-scene geometry and textures | procedural (`render.js`) | shipped |
+| `icon.png` | Platform icon | prior pass | shipped |
+| `assets/textures/*` | Card face atlas, card backs per theme, felt, wood rim, floor | the browser build's procedural painters, baked by `tools/bake-textures.mjs` | shipped |
+| Table, lamps, hall geometry | In-scene geometry | parametric (`native/render.ts`) | shipped |
 | `sfx/card-select.opus`, `card-deselect.opus` | `select` | MOSS-SFX v2.0 | shipped |
 | `sfx/invalid-buzz.opus` | `invalid` | MOSS-SFX v2.0 | shipped |
 | `sfx/card-draw.opus`, `card-draw-take.opus` | `draw` | MOSS-SFX v2.0 | shipped |
@@ -721,7 +608,7 @@ localStorage → leave to title.
 | `sfx/round-win.opus`, `round-lose.opus` | `roundWin`, `roundLose` | MOSS-SFX v2.0 | shipped |
 | `sfx/achievement-chime.opus` | `achievement` | MOSS-SFX v2.0 | shipped |
 | `sfx/ui-click.opus`, `ui-confirm.opus` | `ui` | MOSS-SFX v2.0 | shipped |
-| Music and ambience | Adaptive pad and room tone | procedural WebAudio (`audio.js`) | shipped, by design |
+| Music and ambience | Chord pad and room tone | rendered into clips at start-up (`native/audio.ts`) | shipped, by design |
 
 No 3D model assets: every prop in the hall is parametric geometry, so a mesh import would add
 weight without changing the silhouette.
@@ -743,19 +630,22 @@ weight without changing the silhouette.
 - **No mid-match save.** Leaving a match discards it; only settings, career stats and unlocks persist.
 - **Undo can rewind past a round boundary's intent.** It rewinds to the last human draw phase, which
   after a `nextRound` is the first turn of the new round rather than the end of the previous one.
+- **Port differences (StarHermit engine).** The synthesized fallback blips that played while a sample
+  decoded are gone (a clip still loading is silent); the chord pad's pitch no longer rises with the
+  table; the Graphics panel's per-effect overrides, render-scale slider and FPS readout are the
+  runtime's Options (quality tier, scale, frame limit); the game's Language, volume, reduced-motion,
+  contrast and text-size settings are the runtime's; custom key bindings from the browser build do not
+  carry over (actions renamed to lowercase); guests' browser `localStorage` progress does not migrate
+  (signed-in cloud saves do). Changes made on purpose: the table takes each match's theme (the browser
+  build kept the theme of the first match played in a page), the hint text also shows above the tray
+  for 5 s (it was screen-reader only), and the Left-handed option mirrors the action tray (it was
+  stored but changed nothing).
+- **Hosted client path.** There is none: Meld Hall is solo against AI seats; the old dev server's
+  hosted-table backend was never reachable from the client and is removed.
 
 ## Design intent not yet implemented
 
 1. **Enforced challenge goals.** Turn and deadwood constraints evaluated in the session driver so a
    challenge can be failed, with the failure reason shown on the results screen.
-2. **Online tables and score submission.** Two-player tables over platform-routed realtime rooms
-   (matchmaking/friend invites). A separate ranked daily board.
-
-## Browser interference
-
-`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.
-
-
-## Sound and frame-rate options
-
-The options panel includes Sound controls for master, music, effects and UI volume, a mute that preserves volume levels, and an Auto or manual concurrent-sound limit (1–64). Changes apply immediately with perceptual volume curves. A shared allocator bounds Web Audio and media playback, including loops and scheduled sources. Graphics includes Auto display refresh or a custom maximum frame rate from 1–1000 FPS; rendering is paced independently of simulation and input. Preferences persist locally, with FPS stored per detected GPU, and reconcile with Starhermit settings when signed in. The controls support keyboard and touch input and follow the game language (section 10).
+2. **Online tables.** Two-player tables over platform-routed realtime rooms (matchmaking/friend
+   invites) with a server-script referee. A separate ranked daily board.
