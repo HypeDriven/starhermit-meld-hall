@@ -536,7 +536,8 @@ function resultsScreen(w: number, L: Layout): void {
   const s = app.session;
   if (!s || !s.resultSummary) return;
   const r = s.resultSummary, b = r.breakdown;
-  if (!ui.preferences().highContrast) ui.column("results-still", () => ui.widget("", { role: "none", size: { width: w, height: Math.min(180, w * 0.36, L.lh * 0.22) } }), { style: "results-still", width: w });
+  // the still is decoration: left out in high contrast and on short windows (phone landscape), where the buttons need the room
+  if (!ui.preferences().highContrast && !L.short) ui.column("results-still", () => ui.widget("", { role: "none", size: { width: w, height: Math.min(180, w * 0.36) } }), { style: "results-still", width: w });
   heading("h2", r.phase === "matchOver" ? T("Match over") : T("Round {n} over", { n: b.round }), w, "results-h");
   para(resultsHeadline(), w, "body", "results-headline");
   // the score table
