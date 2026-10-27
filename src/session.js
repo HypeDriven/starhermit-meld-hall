@@ -17,6 +17,14 @@
   const SAVE_KEY = 'meldhall.save.v1';
   const SETTINGS_KEY = 'meldhall.settings.v1';
 
+  // AI pacing timers: the browser's setTimeout by default; the engine client
+  // injects timers on its fixed-step clock (setTimers) so AI turns replay exactly.
+  let timers = {
+    set: function (fn, ms) { return typeof setTimeout === 'undefined' ? null : setTimeout(fn, ms); },
+    clear: function (h) { if (typeof clearTimeout !== 'undefined') clearTimeout(h); },
+  };
+  function setTimers(t) { timers = t; }
+
   let cmdCounter = 0;
   function nextCmdId() { return 'c' + (++cmdCounter) + '_' + Date.now().toString(36); }
 
@@ -152,11 +160,10 @@
 
   Session.prototype.scheduleAI = function () {
     const self = this;
-    if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
-    if (typeof setTimeout === 'undefined') return;
+    if (this.aiTimer) { timers.clear(this.aiTimer); this.aiTimer = null; }
     if (this.aiPaused || this.state.turn === this.humanSeat || this.isOver()) return;
     const delay = Math.max(250, 900 - this.aiDifficulty * 200);
-    this.aiTimer = setTimeout(function () {
+    this.aiTimer = timers.set(function () {
       self.aiTimer = null;
       const p = self.state.turn;
       const choice = Rules.aiChoose(self.state, p);
@@ -290,5 +297,6 @@
     },
     saveProgress: function (p) { saveJSON(SAVE_KEY, p); },
     applyResultToProgress: applyResultToProgress,
+    setTimers: setTimers,
   };
 });

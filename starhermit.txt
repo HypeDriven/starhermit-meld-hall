@@ -1,19 +1,57 @@
 name=Meld Hall
 description=Draw cards, form sets and runs, and lay off cards onto existing melds to empty your hand first.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.19.1
+engine.minor=20
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# Cards, the deck, the discard pile and meld markers also take the pointer or
+# a finger on the table; every button takes the pointer, touch, or Tab and Enter.
 control.left=ArrowLeft | Previous card
 control.right=ArrowRight | Next card
 control.confirm=Enter+Space | Select card
-control.cancel=Escape | Cancel / pause
-control.pause=KeyP | Pause
-control.drawDeck=KeyD | Draw from deck
-control.drawDiscard=KeyF | Take discard
+control.draw_deck=KeyD | Draw from deck
+control.draw_discard=KeyF | Take discard
 control.meld=KeyM | Meld selection
 control.layoff=KeyL | Lay off
 control.discard=KeyX | Discard
 control.undo=KeyU | Undo
 control.hint=KeyH | Hint
-control.cameraReset=KeyC | Reset camera
+control.camera_reset=KeyC | Reset camera
+control.cancel=Escape | Cancel / pause
+control.pause=KeyP | Pause
+engine.group.left=Hand
+engine.group.draw_deck=Turn
+engine.group.undo=Assists
+engine.group.cancel=Match
+
+# Gamepad defaults: the D-pad or left stick moves between cards, South
+# selects, West draws from the deck, North takes the discard, the shoulders
+# meld (left) and discard (right), the left trigger lays off, the right
+# trigger hints, Select undoes, the right stick resets the camera, East
+# cancels and Start pauses.
+engine.gamepad.left=DpadLeft+LeftStickLeft
+engine.gamepad.right=DpadRight+LeftStickRight
+engine.gamepad.confirm=South
+engine.gamepad.draw_deck=West
+engine.gamepad.draw_discard=North
+engine.gamepad.meld=LeftShoulder
+engine.gamepad.discard=RightShoulder
+engine.gamepad.layoff=LeftTrigger
+engine.gamepad.hint=RightTrigger
+engine.gamepad.undo=Select
+engine.gamepad.camera_reset=RightStickPress
+engine.gamepad.cancel=East
+engine.gamepad.pause=Start

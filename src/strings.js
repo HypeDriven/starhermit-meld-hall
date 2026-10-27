@@ -26,7 +26,6 @@
     ['synced to your account', 'sincronizado con tu cuenta', 'mit deinem Konto synchronisiert', 'synchronisée avec votre compte', 'sincronizado com sua conta', 'sincronizzati con il tuo account'],
     ['saved on this device', 'guardado en este dispositivo', 'auf diesem Gerät gespeichert', 'enregistrée sur cet appareil', 'salvo neste dispositivo', 'salvati su questo dispositivo'],
     ['Player', 'Jugador', 'Spieler', 'Joueur', 'Jogador', 'Giocatore'],
-    ['Player {id}', 'Jugador {id}', 'Spieler {id}', 'Joueur {id}', 'Jogador {id}', 'Giocatore {id}'],
     ['Choose a mode', 'Elige un modo', 'Wähle einen Modus', 'Choisissez un mode', 'Escolha um modo', 'Scegli una modalità'],
     ['Players', 'Jugadores', 'Spieler', 'Joueurs', 'Jogadores', 'Giocatori'],
     ['Target score', 'Puntuación objetivo', 'Zielpunktzahl', 'Score cible', 'Pontuação alvo', 'Punteggio obiettivo'],
@@ -48,20 +47,22 @@
     ['This result is ranked.', 'Este resultado es clasificatorio.', 'Dieses Ergebnis wird gewertet.', 'Ce résultat est classé.', 'Este resultado vale para o ranking.', 'Questo risultato va in classifica.'],
     ['Not ranked.', 'Sin clasificación.', 'Ohne Wertung.', 'Non classé.', 'Sem ranking.', 'Senza classifica.'],
 
+    // ---- the engine client (Settings, table targets, gamepad help)
+    ['Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.', 'El sonido, los gráficos, el idioma, el texto más grande, el alto contraste y el movimiento reducido están en las Opciones de StarHermit.', 'Ton, Grafik, Sprache, größere Schrift, hoher Kontrast und reduzierte Bewegung findest du in den StarHermit-Optionen.', 'Le son, les graphismes, la langue, le texte agrandi, le contraste élevé et les animations réduites se trouvent dans les Options StarHermit.', 'Som, gráficos, idioma, texto maior, alto contraste e movimento reduzido ficam nas Opções do StarHermit.', 'Audio, grafica, lingua, testo più grande, contrasto elevato e movimento ridotto sono nelle Opzioni di StarHermit.'],
+    ['Open Options', 'Abrir Opciones', 'Optionen öffnen', 'Ouvrir les options', 'Abrir Opções', 'Apri Opzioni'],
+    ['Key bindings', 'Asignación de teclas', 'Tastenbelegung', 'Affectation des touches', 'Atalhos de teclado', 'Assegnazione tasti'],
+    ['Deck', 'Mazo', 'Stapel', 'Pioche', 'Monte', 'Mazzo'],
+    ['Discard pile', 'Pila de descarte', 'Ablagestapel', 'Défausse', 'Pilha de descarte', 'Pila degli scarti'],
+    ['Gamepad: D-pad moves between cards, A selects, X draws from the deck, Y takes the discard, LB melds, RB discards, LT lays off, RT hints, View undoes, B cancels, Menu pauses.', 'Mando: la cruceta se mueve entre las cartas, A elige, X roba del mazo, Y toma el descarte, LB baja, RB descarta, LT coloca, RT da una pista, Vista deshace, B cancela, Menú pausa.', 'Gamepad: Steuerkreuz wechselt zwischen den Karten, A wählt, X zieht vom Stapel, Y nimmt die Ablage, LB legt aus, RB wirft ab, LT legt an, RT gibt einen Tipp, Ansicht macht rückgängig, B bricht ab, Menü pausiert.', 'Manette : la croix passe d’une carte à l’autre, A choisit, X pioche, Y prend la défausse, LB pose, RB défausse, LT complète, RT donne un indice, Affichage annule, B annule la sélection, Menu met en pause.', 'Controle: o direcional passa pelas cartas, A escolhe, X compra do monte, Y pega o descarte, LB baixa, RB descarta, LT encaixa, RT dá uma dica, Exibir desfaz, B cancela, Menu pausa.', 'Gamepad: la croce direzionale scorre le carte, A sceglie, X pesca dal mazzo, Y prende lo scarto, LB cala, RB scarta, LT attacca, RT dà un aiuto, Visualizza annulla, B annulla, Menu mette in pausa.'],
+
     // ---- play screen
-    ['Game table', 'Mesa de juego', 'Spieltisch', 'Table de jeu', 'Mesa de jogo', 'Tavolo da gioco'],
-    ['Cards left in deck', 'Cartas que quedan en el mazo', 'Karten im Stapel', 'Cartes restantes dans la pioche', 'Cartas restantes no monte', 'Carte rimaste nel mazzo'],
     ['Progress panel', 'Panel de progreso', 'Fortschrittsleiste', 'Panneau de progression', 'Painel de progresso', 'Pannello progressi'],
     ['Pause', 'Pausa', 'Pause', 'Pause', 'Pausar', 'Pausa'],
     ['Status panel', 'Panel de estado', 'Statusleiste', 'Panneau d’état', 'Painel de status', 'Pannello stato'],
-    ['Objective and progress', 'Objetivo y progreso', 'Ziel und Fortschritt', 'Objectif et progression', 'Objetivo e progresso', 'Obiettivo e progressi'],
     ['Objective', 'Objetivo', 'Ziel', 'Objectif', 'Objetivo', 'Obiettivo'],
     ['Progress', 'Progreso', 'Fortschritt', 'Progression', 'Progresso', 'Progressi'],
-    ['Table status', 'Estado de la mesa', 'Tischstatus', 'État de la table', 'Situação da mesa', 'Stato del tavolo'],
     ['Table', 'Mesa', 'Tisch', 'Table', 'Mesa', 'Tavolo'],
-    ['Melds on the table', 'Combinaciones en la mesa', 'Kombinationen auf dem Tisch', 'Combinaisons sur la table', 'Jogos na mesa', 'Combinazioni sul tavolo'],
     ['Scores', 'Puntuaciones', 'Punkte', 'Scores', 'Pontuações', 'Punteggi'],
-    ['Actions', 'Acciones', 'Aktionen', 'Actions', 'Ações', 'Azioni'],
     ['Draw deck', 'Robar del mazo', 'Vom Stapel', 'Piocher', 'Comprar do monte', 'Pesca dal mazzo'],
     ['Take discard', 'Tomar descarte', 'Ablage nehmen', 'Prendre la défausse', 'Pegar o descarte', 'Prendi lo scarto'],
     ['Meld', 'Bajar', 'Auslegen', 'Poser', 'Baixar', 'Cala'],
@@ -69,7 +70,6 @@
     ['Discard', 'Descartar', 'Abwerfen', 'Défausser', 'Descartar', 'Scarta'],
     ['Undo', 'Deshacer', 'Zurück', 'Annuler', 'Desfazer', 'Annulla'],
     ['Hint', 'Pista', 'Tipp', 'Indice', 'Dica', 'Aiuto'],
-    ['Your hand', 'Tu mano', 'Deine Hand', 'Votre main', 'Sua mão', 'La tua mano'],
     ['Round {round} — first to {target} points wins the match. Go out with an empty hand to win the round.', 'Ronda {round}: el primero en llegar a {target} puntos gana la partida. Quédate sin cartas para ganar la ronda.', 'Runde {round} – wer zuerst {target} Punkte hat, gewinnt das Match. Leg alle Karten ab, um die Runde zu gewinnen.', 'Manche {round} — le premier à {target} points gagne la partie. Videz votre main pour gagner la manche.', 'Rodada {round} — quem chegar primeiro a {target} pontos vence a partida. Fique sem cartas para vencer a rodada.', 'Mano {round}: vince la partita chi arriva per primo a {target} punti. Svuota la mano per vincere la mano.'],
     ['You', 'Tú', 'Du', 'Vous', 'Você', 'Tu'],
     ['Opponent {n}', 'Rival {n}', 'Gegner {n}', 'Adversaire {n}', 'Oponente {n}', 'Avversario {n}'],
@@ -122,10 +122,8 @@
     ['Leaderboard', 'Clasificación', 'Bestenliste', 'Classement', 'Ranking', 'Classifica'],
     ['Score', 'Puntos', 'Punkte', 'Score', 'Pontos', 'Punti'],
     ['Personal bests are kept in your save.', 'Tus mejores marcas se guardan en tu partida.', 'Persönliche Bestleistungen bleiben in deinem Spielstand.', 'Vos records personnels sont conservés dans votre sauvegarde.', 'Seus recordes pessoais ficam no seu salvamento.', 'I record personali restano nel tuo salvataggio.'],
-    ['Score breakdown', 'Desglose de la puntuación', 'Punkteaufschlüsselung', 'Détail du score', 'Detalhes da pontuação', 'Dettaglio del punteggio'],
     ['Leave', 'Salir', 'Verlassen', 'Quitter', 'Sair', 'Esci'],
     ['Replay', 'Repetición', 'Wiederholung', 'Rejouer la partie', 'Replay', 'Replay'],
-    ['Next', 'Siguiente', 'Weiter', 'Suivant', 'Próxima', 'Avanti'],
     ['Replay verified: identical final state.', 'Repetición verificada: estado final idéntico.', 'Wiederholung geprüft: identischer Endzustand.', 'Partie vérifiée : état final identique.', 'Replay verificado: estado final idêntico.', 'Replay verificato: stato finale identico.'],
     ['Replay mismatch: {reason}', 'La repetición no coincide: {reason}', 'Wiederholung weicht ab: {reason}', 'Partie divergente : {reason}', 'O replay não confere: {reason}', 'Replay non coerente: {reason}'],
 
@@ -148,17 +146,8 @@
     ['Resume', 'Reanudar', 'Fortsetzen', 'Reprendre', 'Continuar', 'Riprendi'],
     ['Help', 'Ayuda', 'Hilfe', 'Aide', 'Ajuda', 'Aiuto'],
     ['Leave match', 'Abandonar la partida', 'Match verlassen', 'Quitter la partie', 'Sair da partida', 'Abbandona la partita'],
-    ['Audio', 'Audio', 'Audio', 'Audio', 'Áudio', 'Audio'],
-    ['Music', 'Música', 'Musik', 'Musique', 'Música', 'Musica'],
-    ['Effects', 'Efectos', 'Effekte', 'Effets', 'Efeitos', 'Effetti'],
-    ['Ambience', 'Ambiente', 'Umgebung', 'Ambiance', 'Ambiente', 'Ambiente'],
-    ['Voice', 'Voz', 'Stimme', 'Voix', 'Voz', 'Voce'],
-    ['Mute all', 'Silenciar todo', 'Alles stumm', 'Tout couper', 'Silenciar tudo', 'Silenzia tutto'],
     ['Captions for sounds', 'Subtítulos de sonidos', 'Untertitel für Geräusche', 'Sous-titres des sons', 'Legendas dos sons', 'Sottotitoli per i suoni'],
     ['Accessibility', 'Accesibilidad', 'Barrierefreiheit', 'Accessibilité', 'Acessibilidade', 'Accessibilità'],
-    ['Reduced motion', 'Movimiento reducido', 'Weniger Bewegung', 'Animations réduites', 'Movimento reduzido', 'Movimento ridotto'],
-    ['High contrast', 'Alto contraste', 'Hoher Kontrast', 'Contraste élevé', 'Alto contraste', 'Contrasto elevato'],
-    ['Larger text', 'Texto más grande', 'Größerer Text', 'Texte plus grand', 'Texto maior', 'Testo più grande'],
     ['Left-handed controls', 'Controles para zurdos', 'Linkshänder-Steuerung', 'Commandes pour gauchers', 'Controles para canhotos', 'Comandi per mancini'],
     ['Haptics', 'Vibración', 'Haptik', 'Vibrations', 'Vibração', 'Vibrazione'],
     ['Color palette', 'Paleta de colores', 'Farbpalette', 'Palette de couleurs', 'Paleta de cores', 'Tavolozza dei colori'],
@@ -167,9 +156,6 @@
     ['Protanopia-safe', 'Apta para protanopía', 'Für Protanopie', 'Adaptée à la protanopie', 'Para protanopia', 'Adatta alla protanopia'],
     ['Tritanopia-safe', 'Apta para tritanopía', 'Für Tritanopie', 'Adaptée à la tritanopie', 'Para tritanopia', 'Adatta alla tritanopia'],
     ['Done', 'Listo', 'Fertig', 'Terminé', 'Pronto', 'Fatto'],
-    ['3D unavailable', '3D no disponible', '3D nicht verfügbar', '3D indisponible', '3D indisponível', '3D non disponibile'],
-    ['Your browser could not create a WebGL context. The card table below remains fully playable with the accessible card list.', 'Tu navegador no pudo crear un contexto WebGL. La mesa de abajo se puede jugar por completo con la lista accesible de cartas.', 'Dein Browser konnte keinen WebGL-Kontext erstellen. Der Kartentisch unten bleibt mit der barrierefreien Kartenliste voll spielbar.', 'Votre navigateur n’a pas pu créer de contexte WebGL. La table ci-dessous reste entièrement jouable avec la liste de cartes accessible.', 'Seu navegador não conseguiu criar um contexto WebGL. A mesa abaixo continua jogável com a lista de cartas acessível.', 'Il browser non è riuscito a creare un contesto WebGL. Il tavolo qui sotto resta giocabile con l’elenco accessibile delle carte.'],
-    ['Continue without 3D', 'Continuar sin 3D', 'Ohne 3D weiter', 'Continuer sans 3D', 'Continuar sem 3D', 'Continua senza 3D'],
 
     // ---- content: lessons, challenges, achievements (src/content.js)
     ['Drawing a card', 'Robar una carta', 'Eine Karte ziehen', 'Piocher une carte', 'Comprar uma carta', 'Pescare una carta'],
@@ -232,7 +218,6 @@
     'the round has ended': 'la ronda ha terminado',
     'the match has ended': 'la partida ha terminado',
     'You took the round! {points} points from deadwood.': '¡Has ganado la ronda! {points} puntos de cartas muertas.',
-    'Your browser could not create a WebGL context. The card table below remains fully playable with the accessible card list.': 'Tu navegador no ha podido crear un contexto WebGL. La mesa de abajo se puede jugar por completo con la lista accesible de cartas.',
     'Left-handed controls': 'Mandos para zurdos',
     '{name} went out and scored {points}.': '{name} se ha quedado sin cartas y ha sumado {points}.',
     'Reason: the deck ran out. Points = sum of opponents’ deadwood minus winner’s own.': 'Motivo: se ha acabado el mazo. Puntos = suma de las cartas muertas de los rivales menos las del ganador.',
@@ -244,8 +229,7 @@
     'Scores': 'Pointages',
     'Target score': 'Pointage visé',
     'Match score': 'Pointage de la partie',
-    'Score breakdown': 'Détail du pointage'
   };
 
   root.MH_STRINGS = T;
-})(typeof self !== 'undefined' ? self : this);
+})(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : this));
