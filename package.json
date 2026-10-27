@@ -1,23 +1,20 @@
 {
   "name": "meld-hall",
   "version": "1.0.0",
-  "description": "Meld Hall — an elegant hall-table card game of sets, runs, and low deadwood.",
-  "main": "server.js",
+  "private": true,
+  "description": "Meld Hall — an elegant hall-table card game of sets, runs, and low deadwood, on the StarHermit engine.",
   "scripts": {
-    "test": "node tests/run.js && node --test tests/i18n.test.mjs",
-    "test:e2e": "node tests/e2e.mjs",
-    "start": "node server.js"
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/run.js && node --test tests/store.test.mjs tests/i18n.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "plays": "node tools/gen-plays.mjs",
+    "textures": "node tools/bake-textures.mjs"
   },
-  "keywords": [
-    "card-game",
-    "rummy",
-    "three.js"
-  ],
-  "author": "",
+  "keywords": ["card-game", "rummy", "starhermit"],
   "license": "SEE LICENSE IN LICENSE.md",
-  "dependencies": {
-    "three": "^0.170.0"
-  },
   "devDependencies": {
     "playwright-core": "^1.62.1"
   }
