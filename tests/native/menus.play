@@ -1,0 +1,92 @@
+# The menus on a desktop (1366 x 768): How to Play, Settings (the game's own options),
+# the mode select with the Practice options, a Practice game's first turn (draw, undo,
+# hint, a card picked by the arrows and Enter, the status rail), pause, Help from the
+# pause menu and back, leaving the match; then Learn's first lesson completed by a draw.
+# viewport 1366x768
+until 600 Daily Challenge
+frames 30
+save title
+click =How to Play
+until 60 Controls
+frames 10
+expect Discard & deadwood
+save help
+click =Back
+until 60 Daily Challenge
+frames 10
+click =Settings
+until 60 Captions for sounds
+frames 10
+save settings
+click =Left-handed controls
+frames 10
+click =Done
+until 60 Daily Challenge
+frames 10
+click =Play
+until 60 Choose a mode
+frames 10
+click =Practice
+frames 10
+expect Expected duration
+click =50
+frames 20
+click =100
+frames 20
+save mode-practice
+click =Start
+until 300 Draw deck
+frames 60
+expect first to 100 points
+save practice-table
+click =Draw deck
+frames 10
+expect Your turn — meld / discard
+click =Undo
+frames 10
+expect Your turn — draw
+click =Hint
+frames 10
+expect Hint:
+save hint
+key KeyD 1
+frames 10
+key ArrowRight 1
+frames 5
+key ArrowRight 1
+frames 5
+key Enter 1
+frames 10
+save keyboard-pick
+key Escape 1
+frames 10
+expect Your turn — meld / discard
+key Escape 1
+until 60 Resume
+frames 10
+save pause-dialog
+click =Help
+until 60 Controls
+frames 10
+click =Back
+until 60 Draw deck
+frames 10
+click =Pause
+until 60 Resume
+frames 10
+click =Settings
+until 60 Captions for sounds
+frames 10
+click =Done
+until 60 Resume
+frames 10
+click =Leave match
+until 120 Daily Challenge
+frames 10
+click =Learn
+until 300 Drawing a card
+frames 30
+save lesson
+click =Take discard
+frames 30
+expect Your turn — meld / discard

@@ -1,60 +1,62 @@
-// Localization coverage: every English key the markup and code use is
-// translated in every locale (en-GB → en-US, es-ES → es-419, fr-CA → fr-FR
-// inherit), placeholders survive, the language follows sh-language.js and
-// switches live, and the Graphics and StarHermit strings cover the nine locales.
+// Localization coverage: every English key the engine client (native/*.ts),
+// the content and the sound captions show is translated in every locale
+// (en-GB → en-US, es-ES → es-419, fr-CA → fr-FR inherit), placeholders
+// survive, no table keeps a key nothing shows, the account lines exist in
+// every locale, and src/i18n.js switches locale as native/i18n.ts drives it.
+// Run: node --test tests/i18n.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { loadTables, codeKeys, htmlKeys, audit, bootI18n, LOCALES } from './i18n-common.mjs';
+import { loadTables, codeKeys, audit, bootI18n, LOCALES } from './i18n-common.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
+const Content = require('../src/content.js');
 
-function usedKeys() {
-  const keys = new Set(htmlKeys(read('index.html')));
-  for (const f of ['src/ui.js', 'src/platform.js', 'src/audio.js', 'src/content.js', 'src/main.js']) codeKeys(read(f), ['caption']).forEach((k) => keys.add(k));
-  return [...keys].sort();
+export function usedKeys() {
+  const keys = new Set();
+  for (const item of [...Content.LESSONS, ...Content.CHALLENGES, ...Content.ACHIEVEMENTS]) { keys.add(item.title); keys.add(item.text); }
+  for (const f of readdirSync(new URL('native/', ROOT)).filter((n) => n.endsWith('.ts'))) {
+    const src = read('native/' + f);
+    codeKeys(src, ['N'], ['T']).forEach((k) => keys.add(k));
+    // the sound captions table (native/audio.ts CAPTIONS: English keys translated where shown)
+    if (f === 'audio.ts') for (const m of src.slice(src.indexOf('CAPTIONS'), src.indexOf('};', src.indexOf('CAPTIONS'))).matchAll(/: "([^"]+)"/g)) keys.add(m[1]);
+  }
+  return [...keys].filter((k) => /[A-Za-z]/.test(k) && k !== 'Meld Hall').sort();
 }
 
-test('every used key is translated in every locale; placeholders intact', () => {
+test('every used key is translated in every locale; placeholders intact; nothing stale', () => {
   const used = usedKeys();
-  assert.ok(used.length > 150, 'keys found: ' + used.length);
+  assert.ok(used.length > 120, `keys found: ${used.length}`);
   assert.deepEqual(audit(loadTables(ROOT, 'src/strings.js', 'MH_STRINGS'), used), []);
 });
 
-test('every lesson, challenge and achievement text is a translation key', () => {
-  const Content = require('../src/content.js');
-  const tables = loadTables(ROOT, 'src/strings.js', 'MH_STRINGS');
-  for (const item of [...Content.LESSONS, ...Content.CHALLENGES, ...Content.ACHIEVEMENTS]) {
-    for (const k of [item.title, item.text]) assert.ok(tables['de-DE'][k], 'de-DE missing ' + k);
+test('the account and leaderboard lines exist in every locale with their placeholders', () => {
+  const Sh = require('../src/sh-strings.js');
+  const en = Sh.SH_STRINGS['en-US'];
+  for (const loc of LOCALES) {
+    const t = Sh.SH_STRINGS[loc];
+    assert.ok(t, loc);
+    for (const k of Object.keys(en)) {
+      assert.ok(t[k], `${loc} ${k}`);
+      assert.deepEqual((t[k].match(/\{\w+\}/g) || []).sort(), (en[k].match(/\{\w+\}/g) || []).sort(), `${loc} ${k}`);
+    }
   }
 });
 
-test('the locale follows sh-language and switches live', () => {
-  const { I18N, events, doc } = bootI18n(ROOT, { strings: 'src/strings.js', i18n: 'src/i18n.js', global: 'MHI18N', languages: ['de-DE'] });
-  assert.equal(I18N.lang, 'de-DE');
-  assert.equal(doc.documentElement.lang, 'de-DE');
+test('the locale switches as the engine client sets it', () => {
+  const { I18N } = bootI18n(ROOT, { strings: 'src/strings.js', i18n: 'src/i18n.js', global: 'MHI18N' });
+  assert.equal(I18N.lang, 'en-US');
+  assert.equal(I18N.setLocale('de-DE'), 'de-DE');
   assert.equal(I18N.T('Discard'), 'Abwerfen');
-  I18N.language.setChoice('fr-CA');
-  assert.equal(I18N.lang, 'fr-CA');
-  assert.equal(events.at(-1), 'fr-CA');
-  assert.equal(I18N.T('Score'), 'Pointage');
+  I18N.setLocale('fr-CA');
   assert.equal(I18N.T('Discard'), 'Défausser');
-  I18N.language.setChoice('en-GB');
+  I18N.setLocale('en-GB');
   assert.equal(I18N.T('Color palette'), 'Colour palette');
-  I18N.language.setChoice('es-ES');
+  I18N.setLocale('es-ES');
   assert.equal(I18N.T('Settings'), 'Ajustes');
   assert.equal(I18N.T('Deck: {n}', { n: 7 }), 'Mazo: 7');
-});
-
-test('Graphics and StarHermit strings cover all nine locales', () => {
-  const GfxUI = require('../src/gfx-ui.js');
-  const Sh = require('../src/sh-strings.js');
-  const shKeys = Object.keys(Sh.SH_STRINGS['en-US']);
-  for (const l of LOCALES) {
-    assert.ok(GfxUI.STRINGS[l], l);
-    for (const k of shKeys) assert.ok(Sh.SH_STRINGS[l][k], `${l} ${k}`);
-  }
+  assert.equal(I18N.setLocale('xx-YY'), 'en-US');
 });
