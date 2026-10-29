@@ -9,11 +9,12 @@
 // lamp's light pool and the hemisphere fill — framed by the camera in the band
 // the HUD, the action tray and the hand leave (setViewOffset, as before).
 //
-// From three.js r137 (legacy lights): intensities as written (the engine's
-// convention matches r137's), explicitly linear hex colours kept linear, the
-// srgb lin() swatches as plain colours; the r137 point light's cut-off falloff
-// becomes the engine's distance falloff (the lamp pool's intensity raised to
-// match). r137 tone-mapped every draw (ACES at 1.15) before its post chain
+// From three.js r137 (legacy lights; engine.minor 26): intensities are the page's × π, the
+// shadow box and bias the page's, the room environment on every standard material (as r137's scene.environment, scaled by
+// each envMapIntensity) and built with the renderer: r137's legacy room light had no inverse-square falloff, so
+// r155–r162's no-argument room (intensity 5) is far darker than the page's and the 900 room is the nearer match,
+// the lamp's pool raised for the legacy light's cut-off falloff (LAMP_POOL),
+// explicitly linear hex colours kept linear, the srgb lin() swatches as plain colours. r137 tone-mapped every draw (ACES at 1.15) before its post chain
 // (SSAOPass, UnrealBloomPass, the GradeShader output pass, SMAA / FXAA); the
 // runtime's renderer.ao / bloom / grade / antialias tone-map after bloom, so
 // the bloom threshold is the old one taken back through the curve. The procedural canvases (card faces and backs, felt, wood rim,
@@ -24,7 +25,7 @@
 import {
   ACESFilmicToneMapping, AdditiveBlending, AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color,
   ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, ExtrudeGeometry, FogExp2, Group, HemisphereLight, LinearSRGBColorSpace,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera,
+  Mesh, MeshBasicMaterial, OrthographicCamera, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera,
   PlaneGeometry, PMREMGenerator, PointLight, Points, PointsMaterial, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment,
   SRGBColorSpace, Shape, SphereGeometry, TextureLoader, TorusGeometry, Vector2, Vector3, pointerToNdc, renderer, scene,
   type Material, type Object3D, type Side, type Texture,
@@ -45,7 +46,8 @@ export const FRAMING = {
   handRowZ: 3.4, meldRowZ: 0.4, tableRowZ: -1.2, deckZ: -2.6,
 };
 const LAMP_X = [-3.4, 0, 3.4], LAMP_Y = 4.1, LAMP_Z = -4.6;
-/** r137's point light faded to nothing at its distance; the engine's falls off with distance^decay: × this to match the pool. */
+/** r137's legacy point light faded linearly to nothing at its distance; three.js r155+'s falls off with distance^decay:
+ * × this matches the lamp's pool on the felt (measured against the browser build). */
 const LAMP_POOL = 5;
 
 const lin = (hex: number): Color => new Color().setHex(hex, LinearSRGBColorSpace);
@@ -53,13 +55,18 @@ const lin = (hex: number): Color => new Color().setHex(hex, LinearSRGBColorSpace
 // -- the scene's fixed parts --------------------------------------------------------------------
 const camera = new PerspectiveCamera(FRAMING.fov, 1, 0.1, 40);
 const raycaster = new Raycaster();
-const key = new DirectionalLight(0xffe0b3, 1.35);
+const PI = Math.PI;
+const key = new DirectionalLight(0xffe0b3, 1.35 * PI);
 key.position.set(3, 8, 4);
 key.target.position.set(0, 0, 0.2);
+const sc = key.shadow.camera as OrthographicCamera; // fitted to the table top (radius 6.7) and cards above it
+sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.near = 3; sc.far = 17;
+sc.updateProjectionMatrix();
 key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.02;
 key.shadow.radius = 3;
-const hemi = new HemisphereLight(0x4a5f8a, new Color("#1a140e"), 0.6);
-const ambient = new AmbientLight(0xffffff, 0.12);
+const hemi = new HemisphereLight(0x4a5f8a, new Color("#1a140e"), 0.6 * PI);
+const ambient = new AmbientLight(0xffffff, 0.12 * PI);
 // warm pool from the pendant lamps (detailed hall only)
 const lampLight = new PointLight(new Color("#ffc98a"), 0, 16, 1.4);
 lampLight.position.set(0, 4.4, -1.6);
@@ -125,8 +132,9 @@ function mat(p: MatParams, phys?: { clearcoat: number; clearcoatRoughness: numbe
     const { roughness: _r, metalness: _m, envMapIntensity: _e, ...rest } = p;
     return new MeshLambertMaterial(rest);
   }
-  if (phys && tier === "physical") return new MeshPhysicalMaterial({ ...p, ...phys });
-  return new MeshStandardMaterial(p);
+  const m = phys && tier === "physical" ? new MeshPhysicalMaterial({ ...p, ...phys }) : new MeshStandardMaterial(p);
+  m.envMap = look!.reflections ? envMap() : null; // r137's scene.environment, scaled by each material's envMapIntensity
+  return m;
 }
 function cardMat(p: MatParams, glossy = false): MeshStandardMaterial | MeshLambertMaterial {
   if (look!.detailed) {
@@ -269,7 +277,7 @@ function buildEnvironment(): void {
     const wallMesh = add(new Mesh(new PlaneGeometry(40, 14), mat({ color: wall.clone().multiplyScalar(1.4), roughness: 0.9 })), false, true);
     wallMesh.position.set(0, 6, -7.62);
     scene.fog = new FogExp2(wall.clone(), 0.035);
-    lampLight.intensity = 0.75 * LAMP_POOL;
+    lampLight.intensity = 0.75 * LAMP_POOL * PI;
   } else {
     scene.fog = null;
     lampLight.intensity = 0;
@@ -472,7 +480,6 @@ function frameCamera(w: number, h: number, top: number, bottom: number, right: n
   camera.lookAt(FRAMING.lookAt.x, FRAMING.lookAt.y, FRAMING.lookAt.z);
   camera.far = 30 + 12 * k;
   camera.updateProjectionMatrix();
-  key.shadow.distance = camera.position.length() + 10;
 }
 /** The camera key: the framing again (render.js resetCamera). */
 export function resetCamera(): void { frameKey = ""; }
@@ -480,14 +487,16 @@ export function resetCamera(): void { frameKey = ""; }
 // -- the look -----------------------------------------------------------------------------------
 function applyReflections(): void {
   const env = look!.reflections ? envMap() : null;
+  // r137's scene.environment honoured each material's envMapIntensity; three.js r163+'s (the engine's) applies
+  // scene.environmentIntensity instead, so every standard material takes the room as its own envMap.
   scene.traverse((o) => {
     const m = (o as Mesh).material;
     if (!m) return;
     for (const x of Array.isArray(m) ? m : [m]) if (x instanceof MeshStandardMaterial) x.envMap = env;
   });
   // image-based light replaces part of the flat fill so the hall keeps its mood
-  hemi.intensity = env ? 0.38 : 0.6;
-  ambient.intensity = env ? 0.03 : 0.12;
+  hemi.intensity = (env ? 0.38 : 0.6) * PI;
+  ambient.intensity = (env ? 0.03 : 0.12) * PI;
 }
 function rebuild(): void {
   buildEnvironment();
@@ -550,7 +559,7 @@ export function update(dt: number, w: number, h: number, band: { top: number; bo
   // lamp shimmer
   if (bulbs.length) {
     const f = moving ? 1 + 0.035 * Math.sin(t * 7.3) + 0.02 * Math.sin(t * 13.7 + 1.3) : 1;
-    lampLight.intensity = 0.75 * LAMP_POOL * f;
+    lampLight.intensity = 0.75 * LAMP_POOL * PI * f;
     for (const b of bulbs) b.color.setRGB(1, 0.69, 0.35).multiplyScalar(2.6 * f);
   }
   if (fx) {
