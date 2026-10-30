@@ -518,12 +518,12 @@ export function applyLook(next: Look): void {
   };
   // UnrealBloomPass(strength 0.55, radius 0.4, threshold 0.88 on the tone-mapped light): the runtime blooms before
   // tone mapping, where ACES at 1.15 reaches 0.88 from 1.6 — so only lamp bulbs, the selection glow and sparks bloom.
-  // r137 page: minor 29 bloom follows r185 UnrealBloomPass, so the page's 0.55 is squared (0.30) to keep its look.
-  renderer.bloom = next.bloom ? { strength: 0.30, radius: 0.4, threshold: 1.6, resolution: next.budget.bloomRes } : null;
+  // r137 page: the r160 bloom model with the page's own 0.55 (minor 30).
+  renderer.bloom = next.bloom ? { model: "r160", strength: 0.55, radius: 0.4, threshold: 1.6, resolution: next.budget.bloomRes } : null;
   // GradeShader (the output pass, display colours): 0.18 S-curve, +7 % saturation, warm highlights / cool shadows, vignette 0.28.
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.09, saturation: 1.07, split: [0.2, 0.8], shadows: [0.97, 0.99, 1.04], highlights: [1.035, 1.0, 0.965],
-    vignette: { amount: 0.28, inner: 0.38, outer: 0.9 },
+    space: "display", contrastCurve: "s", contrast: 0.18, saturation: 1.07, split: [0.2, 0.8], shadows: [0.97, 0.99, 1.04], highlights: [1.035, 1.0, 0.965],
+    vignette: { amount: 0.28, inner: 0.38, outer: 0.9, scale: [1.1, 1] },
   } : null;
   renderer.antialias = next.antialias;
   renderer.shadowMap.enabled = next.shadows > 0;

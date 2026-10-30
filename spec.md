@@ -16,7 +16,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | Genre | Turn-based rummy-family card game, single-player vs. AI |
 | Players | 2–4 seats; the human always holds seat 0, the rest are AI in local play |
 | Session | One round 2–4 min; a match to the target score 5–15 min |
-| Platforms | StarHermit engine script game (engine 1.27.0, host API 1.29, `engine.minor=29`): played natively by the StarHermit client and in browsers by the engine's web runtime; desktop and phones, portrait and landscape |
+| Platforms | StarHermit engine script game (engine 1.28.0, host API 1.30, `engine.minor=30`): played natively by the StarHermit client and in browsers by the engine's web runtime; desktop and phones, portrait and landscape |
 | Rendering | The card table on `starhermit:scene` (three.js-like 3D) behind an immediate-mode `starhermit:ui` layer (HUD, rails, action tray, the hand as card buttons, dialogs) |
 | Networking | None of its own. The platform (player, cloud save, settings, leaderboards, clock) through `starhermit:platform` / `starhermit:storage`; `score-script.js` is the platform script (leaderboard posting) |
 
@@ -24,7 +24,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.*` (entry `native/main.ts`, version 1.27.0, minor 29, capabilities platform/storage/clipboard), `control.*` keys, `engine.group.*` and `engine.gamepad.*` |
+| `starhermit.txt` | Manifest: name, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.*` (entry `native/main.ts`, version 1.28.0, minor 30, capabilities platform/storage/clipboard), `control.*` keys, `engine.group.*` and `engine.gamepad.*` |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (never edited by hand) |
 | `native/main.ts` | Entry module: screen flow, the session's events (sounds, captions, announcements, sparks, results), commands from the tray/hand/chips/keys/pads/table taps, hints, undo, AI pacing on the fixed-step clock, results posting, lifecycle |
 | `native/screens.ts` | Every screen and dialog on `starhermit:ui`: title, mode select, play (HUD, rails or sheets, tray, hand), pause and Settings dialogs, How to Play, results; captions, hint line and toast |
