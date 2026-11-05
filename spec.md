@@ -29,7 +29,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `native/main.ts` | Entry module: screen flow, the session's events (sounds, captions, announcements, sparks, results), commands from the tray/hand/chips/keys/pads/table taps, hints, undo, AI pacing on the fixed-step clock, results posting, lifecycle |
 | `native/screens.ts` | Every screen and dialog on `starhermit:ui`: title, mode select, play (HUD, rails or sheets, tray, hand), pause and Settings dialogs, How to Play, results; captions, hint line and toast |
 | `native/render.ts` | The 3D hall and table on `starhermit:scene`: environment, card atlas UVs, sync from the rules state, picking, framing (`setViewOffset`), particles, the look per graphics tier |
-| `native/quality.ts` | The old presets and budgets keyed by the runtime's quality tier and level |
+| `native/quality.ts` | The engine-owned effects from `levelSettings()`; the old art presets and budgets keyed by the level's tier |
 | `native/audio.ts` | One-shots from `sfx/`, captions, the room tone and chord pad rendered into looping clips |
 | `native/platform.ts` | localStorage stand-in for `session.js`, the save (cloud slot, merge, old-save migration), the game's options as engine settings, legacy settings removal, player, invite, clock, score posting, leaderboard rows |
 | `native/style.ts` | Registers `assets/ui-style.json`, the theme, high-contrast and colour-vision tokens |
@@ -360,22 +360,25 @@ the shimmer, the drift, the burst and the title's lamp glow.
 
 **Graphics.** ACES filmic tone mapping at exposure 1.15 with sRGB output; theme colours are sRGB.
 A warm key directional light (the only shadow caster) with a hemisphere fill and a faint ambient
-term; on detailed looks the pendant lamps' warm pool (a point light). Per quality tier (the
-runtime's Options › Graphics: `frame().quality`, `native/quality.ts`; the old presets and budgets):
+term; on detailed looks the pendant lamps' warm pool (a point light). Shadows and their map size, AO,
+bloom, the grade and anti-aliasing are the level's own (`levelSettings()`, the engine's table every
+StarHermit game reads; the table shows each tier's anchor level, and levels above an anchor raise
+them), except that Low keeps MSAA until engine 1.36.2 (1.36.1's "off" recolours fog and translucent
+overlays). The art follows the level's tier (`native/quality.ts`; the old presets and budgets):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
-| Shadows (key light map) | off | 512 | 1024 | 2048 |
-| Ambient occlusion | off | off | on (8 samples) | high (16) |
+| Shadows (key light map) | off | 1024 | 2048 | 4096 |
+| Ambient occlusion | off | off | on, ½ res (8 samples) | full res (16) |
 | Bloom (lamp bulbs, selection glow, sparks) | off | on, ½ res | on, ½ res | on, full res |
 | Colour grade + vignette | off | on | on | on |
-| Anti-aliasing | MSAA | FXAA | SMAA | SMAA |
+| Anti-aliasing | MSAA | FXAA | SMAA | MSAA ×4 |
 | Reflections (`RoomEnvironment` + PMREM) | off | on | on | on |
 | Hall | plain (flat materials, box cards) | detailed | detailed | detailed |
 | Shading | Lambert | Standard | Physical (clear-coated card faces and backs) | Physical |
 | Floor / felt / wood textures | — | 256 / 128 / 512 × 32 | 512 / 256 / 1024 × 64 | 1024 / 512 / 2048 × 128 |
 | Rim / felt segments | 48 | 48 | 96 | 128 |
-| Particles | sparks (≤ 12) | sparks (≤ 20) | sparks (≤ 64) + dust motes (140, ≤ 2× by level) | sparks (≤ 96) + motes (200, ≤ 400) |
+| Particles | sparks (≤ 12, ≤ 2× by level) | sparks (≤ 20, ≤ 2× by level) | sparks (≤ 64, ≤ 2× by level) + dust motes (140, ≤ 2× by level) | sparks (≤ 96, ≤ 2× by level) + motes (200, ≤ 400) |
 
 The detailed hall adds the textured plank floor, wood-grain rim and felt fibre, the brass inlay ring,
 wall panels, pendant lamps with glowing bulbs, exponential fog and rounded card slabs. Bloom runs on

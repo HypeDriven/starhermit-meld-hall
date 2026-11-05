@@ -512,14 +512,15 @@ export function applyLook(next: Look): void {
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
   // SSAOPass (kernel radius 0.35, 16 or 32 samples at Ultra) → the runtime's ambient occlusion.
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: 0.8, radius: 0.35, distanceExponent: 1, thickness: 1, scale: 1, samples: next.ao === "high" ? 16 : 8, resolution: 1,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  const ao = next.ao, fullAo = !!ao && ao.resolution >= 1; // the engine's AoQuality: below 1 = "on", from 1 = "high"
+  renderer.ao = ao && {
+    blendIntensity: 0.8, radius: 0.35, distanceExponent: 1, thickness: 1, scale: 1, samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: fullAo ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // UnrealBloomPass(strength 0.55, radius 0.4, threshold 0.88 on the tone-mapped light): the runtime blooms before
   // tone mapping, where ACES at 1.15 reaches 0.88 from 1.6 — so only lamp bulbs, the selection glow and sparks bloom.
   // r137 page: the r160 bloom model with the page's own 0.55 (minor 30).
-  renderer.bloom = next.bloom ? { model: "r160", strength: 0.55, radius: 0.4, threshold: 1.6, resolution: next.budget.bloomRes } : null;
+  renderer.bloom = next.bloom === null ? null : { model: "r160", strength: 0.55, radius: 0.4, threshold: 1.6, resolution: next.bloom };
   // GradeShader (the output pass, display colours): 0.18 S-curve, +7 % saturation, warm highlights / cool shadows, vignette 0.28.
   renderer.grade = next.grade ? {
     space: "display", contrastCurve: "s", contrast: 0.18, saturation: 1.07, split: [0.2, 0.8], shadows: [0.97, 0.99, 1.04], highlights: [1.035, 1.0, 0.965],
@@ -528,7 +529,7 @@ export function applyLook(next: Look): void {
   renderer.antialias = next.antialias;
   renderer.shadowMap.enabled = next.shadows > 0;
   key.castShadow = next.shadows > 0;
-  if (next.shadows > 0) key.shadow.mapSize = next.shadows;
+  if (next.shadows > 0) key.shadow.mapSize = next.shadows; // the level's size (minor ≥ 23: the engine keeps what the game sets)
   rebuild();
 }
 /** The session's theme (content.js THEMES: the Journey stage's or the Daily's, else Hall Dusk). */

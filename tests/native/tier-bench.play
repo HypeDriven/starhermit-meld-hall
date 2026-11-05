@@ -1,0 +1,30 @@
+# Bench scene: Journey stage 1, fixed seed, a full turn through the real UI, the AI's turns and a held table.
+# viewport 1366x768
+until 600 Daily Challenge
+frames 10
+click =Journey 1/40
+until 300 Draw deck
+frames 120
+measure start
+until 4000 Your turn — draw
+frames 10
+frames 5
+click =Take discard
+frames 10
+frames 5
+click =10♦, value 10
+frames 5
+click =10♥, value 10
+frames 5
+click =10♠, value 10
+frames 5
+click =Meld
+frames 10
+frames 5
+click =K♦, value 10
+frames 5
+click =Discard
+frames 10
+until 4000 Your turn — draw
+frames 300
+measure stop

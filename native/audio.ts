@@ -14,8 +14,9 @@
 // "interface" bus, the rest on "effects". The oscillator blips the browser
 // build synthesized while a sample decoded are not ported (a live synthesis
 // graph makes clip loads fail on the engine's web runtime), so a clip still
-// loading is silent. Clips load once the mixer runs (natively at once, in a
-// browser after the first press), one at a time.
+// loading is silent. Every clip loads at once in onStart; the room tone and the
+// pad start once the mixer runs (natively at once, in a browser after the first
+// press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 
 const SFX: Record<string, string[]> = {
@@ -42,16 +43,17 @@ export const CAPTIONS: Record<string, string> = {
 };
 export type Sfx = keyof typeof SFX;
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
 const cursor = new Map<string, number>();
-let loading = false;
-let wantClips = false;
 let captionFn: ((key: string) => void) | null = null;
 /** fn(English caption key) for every captioned sound. */
 export function onCaption(fn: (key: string) => void): void { captionFn = fn; }
 
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
+/** Loads every clip at once (onStart); a cue whose clip is still loading is skipped. */
+export function loadSfx(): void {
+  for (const list of Object.values(SFX)) for (const name of list) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
+}
 
 /** src/audio.js play(kind): the event's next variant and its caption. */
 export function play(event: Sfx): void {
@@ -64,7 +66,7 @@ export function play(event: Sfx): void {
   if (!clip) return;
   cursor.set(event, i + 1);
   try { playClip(clip, { bus: event === "ui" ? "interface" : "effects" }); }
-  catch { clips.delete(file); if (!queue.includes(file)) queue.push(file); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the room tone and the chord pad ------------------------------------------------------------
@@ -125,22 +127,9 @@ export function setMusicIntensity(v: number): void {
   if (padVoice) try { padVoice.fade(1 + intensity, 1); } catch { /* gone */ }
 }
 
-/** Each frame: the clips once the mixer runs (one at a time), then the room tone and the pad. */
+/** Each frame, once the mixer runs: the room tone and the pad, a slice at a time. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const list of Object.values(SFX)) for (const n of list) if (!queue.includes(n)) queue.push(n);
-  }
-  if (!loading && queue.length) {
-    const name = queue.shift()!;
-    if (!clips.has(name)) {
-      loading = true;
-      loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
-    }
-    return;
-  }
-  if (loading) return;
   if (!ambClip) {
     if (!renderAmbience(8000)) return;
     try { ambClip = createClip([amb], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); ambPos = 0; }
