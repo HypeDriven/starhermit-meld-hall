@@ -16,7 +16,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | Genre | Turn-based rummy-family card game, single-player vs. AI |
 | Players | 2–4 seats; the human always holds seat 0, the rest are AI in local play |
 | Session | One round 2–4 min; a match to the target score 5–15 min |
-| Platforms | StarHermit engine script game (engine 1.36.2, host API 1.32, `engine.minor=32`): played natively by the StarHermit client and in browsers by the engine's web runtime; desktop and phones, portrait and landscape |
+| Platforms | StarHermit engine script game (engine 1.38.0, host API 1.38, `engine.minor=38`): played natively by the StarHermit client and in browsers by the engine's web runtime; desktop and phones, portrait and landscape |
 | Rendering | The card table on `starhermit:scene` (three.js-like 3D) behind an immediate-mode `starhermit:ui` layer (HUD, rails, action tray, the hand as card buttons, dialogs) |
 | Networking | None of its own. The platform (player, cloud save, settings, leaderboards, clock) through `starhermit:platform` / `starhermit:storage`; `score-script.js` is the platform script (leaderboard posting) |
 
@@ -24,7 +24,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.*` (entry `native/main.ts`, version 1.36.2, minor 32, capabilities platform/storage/clipboard), `control.*` keys, `engine.group.*` and `engine.gamepad.*` |
+| `starhermit.txt` | Manifest: name, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.*` (entry `native/main.ts`, version 1.38.0, minor 32, capabilities platform/storage/clipboard), `control.*` keys, `engine.group.*` and `engine.gamepad.*` |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (never edited by hand) |
 | `native/main.ts` | Entry module: screen flow, the session's events (sounds, captions, announcements, sparks, results), commands from the tray/hand/chips/keys/pads/table taps, hints, undo, AI pacing on the fixed-step clock, results posting, lifecycle |
 | `native/screens.ts` | Every screen and dialog on `starhermit:ui`: title, mode select, play (HUD, rails or sheets, tray, hand), pause and Settings dialogs, How to Play, results; captions, hint line and toast |
@@ -363,7 +363,7 @@ A warm key directional light (the only shadow caster) with a hemisphere fill and
 term; on detailed looks the pendant lamps' warm pool (a point light). Shadows and their map size, AO,
 bloom, the grade and anti-aliasing are the level's own (`levelSettings()`, the engine's table every
 StarHermit game reads; the table shows each tier's anchor level, and levels above an anchor raise
-them), except that Low keeps MSAA until engine 1.36.2 (1.36.2's "off" recolours fog and translucent
+them), except that Low keeps MSAA until engine 1.38.0 (1.38.0's "off" recolours fog and translucent
 overlays). The art follows the level's tier (`native/quality.ts`; the old presets and budgets):
 
 | | Low | Balanced | High | Ultra |
