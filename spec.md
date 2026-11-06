@@ -39,8 +39,7 @@ lay off onto anyone's melds, discard, and be the one holding nothing when the ha
 | `src/content.js` | `MeldContent`: 5 themes, 40 journey stages, 6 lessons, 3 challenges, 5 achievements, daily seeds, offline validators |
 | `src/session.js` | `MeldSession`: per-match driver, mode factories, undo stack, AI pacing (timers injectable: `setTimers`), settings/progress through `localStorage` |
 | `src/store.js` | `MeldStore`: the progress document, its merge, the old cloud slot reader, session.js's checksummed envelope, the game's options and the old settings-KV keys |
-| `src/strings.js`, `src/i18n.js` | Translation tables (English keys, nine locales) and the pure `MHI18N` core |
-| `src/sh-strings.js` | Account strings (sign-in, invite, toasts, leaderboard line) in the nine locales |
+| `assets/strings.json` | Translation tables the engine loads (English keys, nine locales); account lines are the engine's `starhermit.*` |
 | `score-script.js` | StarHermit platform script (`server=`): range-checks a finished match total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
 | `assets/ui-style.json` | The UI style sheet, converted from `tools/ui-style.css` by `npm run css` |
 | `assets/textures/` | Baked card faces and backs (atlases), felt, wood rim and floor per texture budget (`npm run textures`) |
@@ -363,8 +362,7 @@ A warm key directional light (the only shadow caster) with a hemisphere fill and
 term; on detailed looks the pendant lamps' warm pool (a point light). Shadows and their map size, AO,
 bloom, the grade and anti-aliasing are the level's own (`levelSettings()`, the engine's table every
 StarHermit game reads; the table shows each tier's anchor level, and levels above an anchor raise
-them), except that Low keeps MSAA until engine 1.38.0 (1.38.0's "off" recolours fog and translucent
-overlays). The art follows the level's tier (`native/quality.ts`; the old presets and budgets):
+them). The art follows the level's tier (`native/quality.ts`; the old presets and budgets):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
@@ -372,7 +370,7 @@ overlays). The art follows the level's tier (`native/quality.ts`; the old preset
 | Ambient occlusion | off | off | on, ½ res (8 samples) | full res (16) |
 | Bloom (lamp bulbs, selection glow, sparks) | off | on, ½ res | on, ½ res | on, full res |
 | Colour grade + vignette | off | on | on | on |
-| Anti-aliasing | MSAA | FXAA | SMAA | MSAA ×4 |
+| Anti-aliasing | none | FXAA | SMAA | MSAA ×4 |
 | Reflections (`RoomEnvironment` + PMREM) | off | on | on | on |
 | Hall | plain (flat materials, box cards) | detailed | detailed | detailed |
 | Shading | Lambert | Standard | Physical (clear-coated card faces and backs) | Physical |
@@ -415,7 +413,7 @@ runtime has no ambience bus). Clips load one at a time once the mixer runs (nati
 browser after the first press); a clip still loading is silent (the browser build's synthesized
 fallback blips are not ported: a live synthesis graph makes clip loads fail on the web runtime).
 
-**Music and ambience.** Rendered once into looping clips a slice a frame: the four-chord triangle
+**Music and ambience.** Rendered offline once at start into looping clips: the four-chord triangle
 pad (one chord every 3 s, each swelling in over 0.8 s and out by 3.2 s; a 12 s loop) and the hall's
 room tone (noise through a 220 Hz low-pass, a 2 s loop). The pad's level rises with the melds on the
 table (×1 to ×2 at six melds); its pitch no longer rises with it.
@@ -453,9 +451,9 @@ string (title, mode select, HUD, rails, tray, hand and meld labels, hints, rejec
 help, pause, settings, lessons, challenges, achievements, sync status, captions, account lines) ships
 in all nine. Card names use rank letters and suit glyphs and need no translation.
 
-**Where strings live:** `src/strings.js` holds the tables keyed by the English source text (en-GB,
-es-ES and fr-CA list only their differences — *Colour palette*, *Ajustes*, *pointage*); `src/i18n.js`
-is the pure lookup; `src/sh-strings.js` the account strings. `native/i18n.ts` picks the locale from the
+**Where strings live:** `assets/strings.json` holds the tables keyed by the English source text (en-GB,
+es-ES and fr-CA list only their differences — *Colour palette*, *Ajustes*, *pointage*); the engine's
+`strings` is the lookup and its `starhermit.*` keys the account strings. `native/i18n.ts` picks the locale from the
 runtime's interface language (`preferences().language`: Options › Language, else the account's
 preferred language, else the device's; es-MX → es-419, en-AU → en-GB, fr → fr-FR, pt-PT → pt-BR) and
 follows a change at once: every string is drawn through `T()` each frame. "Meld Hall" and
@@ -548,7 +546,7 @@ button runs it and shows the outcome.
 
 **Performance.** The table's cards are rebuilt on every state change (≤ ~60 meshes) from geometry
 cached per card face and one face material; particles are one preallocated `Points` buffer per tier.
-Static textures are baked images; the audio loops render a slice a frame.
+Static textures are baked images; the audio loops render offline at start.
 
 ---
 

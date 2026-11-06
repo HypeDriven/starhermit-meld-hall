@@ -6,18 +6,17 @@
 // chords of three notes, one every 3 s, each swelling in over 0.8 s and out by
 // 3.2 s) whose level rises with the melds on the table. The browser build ran
 // both live (a noise loop and oscillators every 3 s); here they are rendered
-// once into clips (createClip, a slice a frame) and looped on the music bus
+// offline once at start (OfflineAudioContext) into clips and looped on the music bus
 // (the runtime has no ambience bus; the room tone's gain folds in the old
 // ambience slider's 40 % default against music's 50 %). The pad's pitch no
 // longer rises with the intensity, only its level. The runtime's Options own
 // the volumes, the mute and the voice limit; UI clicks play on the
 // "interface" bus, the rest on "effects". The oscillator blips the browser
-// build synthesized while a sample decoded are not ported (a live synthesis
-// graph makes clip loads fail on the engine's web runtime), so a clip still
+// build synthesized while a sample decoded are not ported, so a clip still
 // loading is silent. Every clip loads at once in onStart; the room tone and the
 // pad start once the mixer runs (natively at once, in a browser after the first
 // press).
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, SoundBank, type AudioClip, type Sound } from "starhermit:audio";
 
 const SFX: Record<string, string[]> = {
   select: ["card-select", "card-deselect"],
@@ -42,17 +41,21 @@ export const CAPTIONS: Record<string, string> = {
   deal: "Cards dealt", hint: "Hint offered", matchWin: "Match won",
 };
 export type Sfx = keyof typeof SFX;
-const clips = new Map<string, AudioClip>();
-const cursor = new Map<string, number>();
+const banks = new Map<string, SoundBank>();
 let captionFn: ((key: string) => void) | null = null;
 /** fn(English caption key) for every captioned sound. */
 export function onCaption(fn: (key: string) => void): void { captionFn = fn; }
 
-/** Loads every clip at once (onStart); a cue whose clip is still loading is skipped. */
+/** Loads every clip and renders the loops at once (onStart); a cue whose clips are still loading is skipped. */
 export function loadSfx(): void {
-  for (const list of Object.values(SFX)) for (const name of list) {
-    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  for (const [event, list] of Object.entries(SFX)) {
+    void Promise.all(list.map((name) => loadClip(`sfx/${name}.opus`).catch((e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); return null; })))
+      .then((loaded) => {
+        const clips = loaded.filter((c) => c !== null);
+        if (clips.length) banks.set(event, new SoundBank({ clips, order: "sequence", bus: event === "ui" ? "interface" : "effects" }));
+      });
   }
+  renderLoops();
 }
 
 /** src/audio.js play(kind): the event's next variant and its caption. */
@@ -60,59 +63,50 @@ export function play(event: Sfx): void {
   const names = SFX[event];
   if (!names) return;
   if (CAPTIONS[event] && captionFn) captionFn(CAPTIONS[event]!);
-  const i = (cursor.get(event) ?? 0) % names.length;
-  const file = names[i]!;
-  const clip = clips.get(file);
-  if (!clip) return;
-  cursor.set(event, i + 1);
-  try { playClip(clip, { bus: event === "ui" ? "interface" : "effects" }); }
+  try { banks.get(event)?.play(); }
   catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the room tone and the chord pad ------------------------------------------------------------
 const RATE = 22050;
-const AMB_N = RATE * 2;
-const amb = new Float32Array(AMB_N);
-let ambPos = 0, ambY = 0, seed = 0x51a7;
-function noise(): number {
-  seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
-  return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-}
-/** The 2 s noise loop through a one-pole 220 Hz lowpass, run twice so the loop joins without a click. */
-function renderAmbience(count: number): boolean {
-  const k = 1 - Math.exp((-2 * Math.PI * 220) / RATE);
-  const end = Math.min(2 * AMB_N, ambPos + count);
-  for (; ambPos < end; ambPos++) {
-    const i = ambPos % AMB_N;
-    if (ambPos < AMB_N) amb[i] = noise();
-    ambY += k * (amb[i]! - ambY);
-    if (ambPos >= AMB_N) amb[i] = ambY;
-  }
-  return ambPos >= 2 * AMB_N;
+/** The 2 s noise loop through a 220 Hz lowpass; periodic once the filter settles, so the loop joins. */
+async function renderAmbience(): Promise<AudioClip> {
+  const n = RATE * 2, settle = Math.round(0.25 * RATE);
+  const off = new OfflineAudioContext(1, settle + n, RATE);
+  const noise = off.createNoise({ seed: 0x51a7, seconds: 2 });
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 220;
+  noise.connect(lp).connect(off.destination);
+  noise.start();
+  const r = await off.startRendering();
+  return createClip([r.getChannelData(0).slice(settle)], RATE);
 }
 const CHORDS = [[261.6, 329.6, 392], [220, 261.6, 329.6], [196, 246.9, 293.7], [174.6, 220, 261.6]];
 const PAD_N = RATE * 12;
-const pad = new Float32Array(PAD_N);
-let padPos = 0;
-/** One 12 s cycle of the pad (each chord at 3 s steps, its 0.2 s tail wrapping round), a slice at a time. */
-function renderPad(count: number): boolean {
-  const end = Math.min(PAD_N, padPos + count);
-  for (; padPos < end; padPos++) {
-    let v = 0;
-    for (let j = 0; j < 4; j++) {
-      let t = (padPos / RATE - j * 3 + 12) % 12;
-      if (t >= 3.2) continue;
-      const env = t < 0.8 ? t / 0.8 : 1 - (t - 0.8) / 2.4;
-      for (const f of CHORDS[j]!) {
-        const ph = (t * f) % 1;
-        v += (ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph) * 0.05 * env;
-      }
+/** One 12 s cycle of the pad (each chord at 3 s steps, its 0.2 s tail wrapped round to the start). */
+async function renderPad(): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, Math.round(RATE * 12.2), RATE);
+  CHORDS.forEach((chord, j) => {
+    const at = j * 3;
+    const g = off.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.05, at + 0.8);
+    g.gain.linearRampToValueAtTime(0, at + 3.2);
+    g.connect(off.destination);
+    for (const f of chord) {
+      const osc = off.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = f;
+      osc.connect(g);
+      osc.start(at);
+      osc.stop(at + 3.2);
     }
-    pad[padPos] = v;
-  }
-  return padPos >= PAD_N;
+  });
+  const d = (await off.startRendering()).getChannelData(0);
+  const out = d.slice(0, PAD_N);
+  for (let i = PAD_N; i < d.length; i++) out[i - PAD_N]! += d[i]!;
+  return createClip([out], RATE);
 }
 let ambClip: AudioClip | null = null;
 let padClip: AudioClip | null = null;
@@ -127,24 +121,21 @@ export function setMusicIntensity(v: number): void {
   if (padVoice) try { padVoice.fade(1 + intensity, 1); } catch { /* gone */ }
 }
 
-/** Each frame, once the mixer runs: the room tone and the pad, a slice at a time. */
+/** Renders the room tone and the pad, one context each (onStart). */
+function renderLoops(): void {
+  const warn = (e: unknown): void => console.warn(`audio: ${String(e)}`);
+  renderAmbience().then((c) => { ambClip = c; }, warn);
+  renderPad().then((c) => { padClip = c; }, warn);
+}
+
+/** Each frame, once the mixer runs: the room tone and the pad. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (!ambClip) {
-    if (!renderAmbience(8000)) return;
-    try { ambClip = createClip([amb], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); ambPos = 0; }
-    return;
-  }
-  if (!ambVoice) {
+  if (ambClip && !ambVoice) {
     try { ambVoice = playClip(ambClip, { bus: "music", gain: 0.8, loop: true }); } catch { ambVoice = null; }
     return;
   }
-  if (!padClip) {
-    if (!renderPad(6000)) return;
-    try { padClip = createClip([pad], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); padPos = 0; }
-    return;
-  }
-  if (!padVoice) {
+  if (padClip && !padVoice) {
     try { padVoice = playClip(padClip, { bus: "music", gain: 1 + intensity, loop: true }); } catch { padVoice = null; }
   }
 }

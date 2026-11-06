@@ -340,8 +340,8 @@ function postToLeaderboard(): void {
 export function leaderboardLine(): string | null {
   const r = app.lb;
   if (!r) return null;
-  if (r === "posting") return S("lbPosting");
-  return !r.posted ? S("lbNotPosted") : r.rank ? S("lbRank", { rank: r.rank }) : S("lbPosted");
+  if (r === "posting") return S("leaderboardPosting");
+  return !r.posted ? S("leaderboardNotPosted") : r.rank ? S("leaderboardRank", { rank: r.rank }) : S("leaderboardPosted");
 }
 /** Daily is the ranked mode: the shared board read-only when the platform has one. */
 function showDailyBoard(): void {
@@ -388,7 +388,7 @@ export function copyInvite(): void {
   const link = platform.inviteLink();
   if (!link) return;
   audio.play("ui");
-  try { clipboard.writeText(link); toast(() => S("copied")); } catch { toast(() => S("copyFailed")); }
+  try { clipboard.writeText(link); toast(() => S("inviteCopied")); } catch { toast(() => S("inviteFailed")); }
 }
 export function signIn(): void { void requestSignIn().catch(() => undefined); }
 

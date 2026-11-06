@@ -291,6 +291,7 @@ function buildEnvironment(): void {
 // -- particles ----------------------------------------------------------------------------------
 interface Fx { pts: Points; pos: Float32Array; vel: Float32Array; life: Float32Array; max: number; next: number }
 let fx: Fx | null = null;
+let fxAlive = false; // the pool's loop only runs with sparks alive
 let motes: { pts: Points; pos: Float32Array; seed: Float32Array; n: number } | null = null;
 function buildParticles(): void {
   for (const o of [fx, motes]) if (o) { scene.remove(o.pts); o.pts.geometry.dispose(); (o.pts.material as Material).dispose(); }
@@ -331,6 +332,7 @@ function buildParticles(): void {
 /** Sparks over the meld row (render.js burst). */
 export function burst(count = 32): void {
   if (!fx || reducedMotion) return;
+  fxAlive = true;
   const cap = look!.budget.burst;
   const n = Math.min(count, look!.particles === "high" ? cap : Math.round(cap / 2));
   for (let i = 0; i < n; ++i) {
@@ -564,7 +566,7 @@ export function update(dt: number, w: number, h: number, band: { top: number; bo
     lampLight.intensity = 0.75 * LAMP_POOL * PI * f;
     for (const b of bulbs) b.color.setRGB(1, 0.69, 0.35).multiplyScalar(2.6 * f);
   }
-  if (fx) {
+  if (fx && fxAlive) {
     let any = false;
     for (let k = 0; k < fx.max; ++k) {
       if (fx.life[k]! <= 0) continue;
@@ -577,6 +579,7 @@ export function update(dt: number, w: number, h: number, band: { top: number; bo
       if (fx.life[k]! <= 0) fx.pos[k * 3 + 1] = -999;
     }
     if (any) fx.pts.geometry.getAttribute("position")!.needsUpdate = true;
+    fxAlive = any;
   }
   if (motes && moving) {
     const m = motes;

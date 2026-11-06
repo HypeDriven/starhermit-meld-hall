@@ -7,7 +7,7 @@
 // scripts so their globals are this module's exports.
 import { loadClassic } from "starhermit:script";
 
-for (const f of ["src/rules.js", "src/content.js", "src/session.js", "src/store.js", "src/strings.js", "src/i18n.js", "src/sh-strings.js"]) loadClassic(f);
+for (const f of ["src/rules.js", "src/content.js", "src/session.js", "src/store.js"]) loadClassic(f);
 
 // -- The shapes this client reads -------------------------------------------------
 export type Phase = "draw" | "act" | "roundOver" | "matchOver";
@@ -94,20 +94,11 @@ interface StoreApi {
   pickOptions(raw: unknown): Partial<Options>;
   BROWSER_KEYS: string[];
 }
-interface I18nApi {
-  T(key: string, vars?: Record<string, string | number> | null): string;
-  setLocale(tag: string): string;
-  readonly lang: string;
-  locales: string[];
-}
-interface ShApi { shStrings(langs: string[]): Record<string, string> }
 
 const g = globalThis as unknown as {
-  MeldRules: RulesApi; MeldContent: ContentApi; MeldSession: SessionApi; MeldStore: StoreApi; MHI18N: I18nApi; ShStrings: ShApi;
+  MeldRules: RulesApi; MeldContent: ContentApi; MeldSession: SessionApi; MeldStore: StoreApi;
 };
 export const Rules = g.MeldRules;
 export const Content = g.MeldContent;
 export const Sess = g.MeldSession;
 export const Store = g.MeldStore;
-export const I18n = g.MHI18N;
-export const ShStrings = g.ShStrings;

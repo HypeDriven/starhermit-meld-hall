@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : globalThis, function () {
 
   const CONTENT_VERSION = '1.0.0';
-  // N() marks player-facing English keys; src/i18n.js translates them where they are shown.
+  // N() marks player-facing English keys; native/i18n.ts translates them where they are shown.
   const N = function (key) { return key; };
 
   /* ---------- five original visual themes ---------- */
