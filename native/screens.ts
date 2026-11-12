@@ -1,3 +1,7 @@
+import { localizedStyle as __l10nStyle } from "./l10n/font.ts";
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
+// localization-runtime:attached
+import { openLocalizedOptions as __l10nOptions } from "./l10n/menu.ts";
 // The browser build's DOM shell (index.html + src/ui.js) as starhermit:ui,
 // built every frame over the table: the title over the hall key art (Play,
 // Daily Challenge with the day, Journey with the stages unlocked, Learn, How
@@ -16,7 +20,25 @@
 // one-line HUD, the tray as a two-column block on the right, the hand under
 // the table). The table is framed in the band the HUD, tray and hand leave
 // (main.ts view → render.ts).
-import { frame, openMenu } from "starhermit:engine";
+// The browser build's DOM shell (index.html + src/ui.js) as starhermit:ui,
+// built every frame over the table: the title over the hall key art (Play,
+// Daily Challenge with the day, Journey with the stages unlocked, Learn, How
+// to Play, Settings, Sign in / Invite, the profile line), the mode select
+// (the five modes, their description, the Practice options and the Challenge
+// pick), the play screen (the HUD: objective, turn, deck, scores, the rail
+// toggles and Pause; the Objective / Progress and Table / Scores rails; the
+// action tray with its keys; the hand as paper card buttons; the hint and
+// caption lines), the pause menu and Settings as dialogs, How to Play (the
+// rule cards and the effective keys), the results (the still, the headline,
+// the score table, achievements, the leaderboard line, the Daily's board,
+// Leave / Replay / Next) and the account toast.
+// The old media queries are layouts picked by the window's logical size: wide
+// (≥ 1024 px: both rails beside the table), compact (the rails as sheets the
+// ☰ and ⋯ toggles open above the tray) and short landscape (≤ 500 px tall: a
+// one-line HUD, the tray as a two-column block on the right, the hand under
+// the table). The table is framed in the band the HUD, tray and hand leave
+// (main.ts view → render.ts).
+import { frame } from "starhermit:engine";
 import { bindings, requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -57,13 +79,13 @@ function button(b: Btn, width: number | null = null): void {
   if (b.key) {
     opts.content = () => ui.row(`${b.id}-face`, () => {
       ui.label(b.text);
-      ui.style("small-muted").label(b.key!);
+      ui.style(__l10nStyle("small-muted")).label(b.key!);
     }, { spacing: 6, align: "center" });
   } else if (width != null && buttonWidth(b.text, style) > width) {
     const inner = Math.max(20, width - 34);
-    opts.content = () => { ui.style({ text: { align: "center" } }).paragraph(b.text, inner); };
+    opts.content = () => { ui.style(__l10nStyle({ text: { align: "center" } })).paragraph(b.text, inner); };
   }
-  if (ui.style(style, s).id(b.id).button(b.text, opts) && fresh()) later(b.act);
+  if (ui.style(__l10nStyle(style), __l10nStyle(s)).id(b.id).button(b.text, opts) && fresh()) later(b.act);
 }
 /** One full-width button a line (index.html .menu-grid). */
 function stack(label: string, list: Btn[], width: number): ui.Rect {
@@ -79,17 +101,17 @@ function flow(label: string, list: Btn[], width: number, gap = 10, justify: "sta
 /** Text up to `width` wide: one label when it fits, else a paragraph. */
 function para(text: string, width: number, cls = "body", id?: string): void {
   if (!text) return;
-  let u = ui.style(cls);
+  let u = ui.style(__l10nStyle(cls));
   if (id) u = u.id(id);
   if (textWidth(text, cls) <= width) u.label(text);
   else u.paragraph(text, width);
 }
 function heading(cls: string, text: string, width: number, id?: string): void {
   if (textWidth(text, cls, "heading") <= width) (id ? ui.id(id) : ui).style(cls).heading(text);
-  else ui.style(cls).paragraph(text, width);
+  else ui.style(__l10nStyle(cls)).paragraph(text, width);
 }
 function badge(id: string, text: string): ui.Rect {
-  return ui.column(id, () => ui.style("badge-text").id(`${id}-t`).label(text), { style: "badge", align: "center" });
+  return ui.column(id, () => ui.style(__l10nStyle("badge-text")).id(`${id}-t`).label(text), { style: "badge", align: "center" });
 }
 function rect(r: ui.Rect): void { hudRects.push({ x: r.x, y: r.y, width: r.width, height: r.height }); }
 
@@ -168,7 +190,7 @@ function badgeButton(b: Btn, extra: string, w: number): void {
   const opts: ui.ButtonOptions = {
     content: () => ui.row(`${b.id}-face`, () => { ui.label(b.text); badge(`${b.id}-badge`, extra); }, { spacing: 12, align: "center" }),
   };
-  if (ui.style("btn", { width: w }).id(b.id).button(`${b.text} ${extra}`, opts) && fresh()) later(b.act);
+  if (ui.style(__l10nStyle("btn"), __l10nStyle({ width: w })).id(b.id).button(`${b.text} ${extra}`, opts) && fresh()) later(b.act);
 }
 function titleScreen(w: number): void {
   ui.column("title-head", () => {
@@ -210,7 +232,7 @@ function modeScreen(w: number, L: Layout): void {
   heading("h2", T("Choose a mode"), w, "mode-h");
   // one mode a line; on a short window (phone landscape) a wrapping row, so Start stays in view
   const modeBtn = (m: (typeof MODES)[number], bw?: number): void => {
-    if (ui.style("mode-pick", bw ? { width: bw } : {}).id(`mode-${m.id}`).button(T(m.name), { selected: app.pendingMode === m.id }) && fresh()) later(() => pickMode(m.id));
+    if (ui.style(__l10nStyle("mode-pick"), __l10nStyle(bw ? { width: bw } : {})).id(`mode-${m.id}`).button(T(m.name), { selected: app.pendingMode === m.id }) && fresh()) later(() => pickMode(m.id));
   };
   if (L.short) {
     const rows: (typeof MODES)[number][][] = [[]];
@@ -453,7 +475,7 @@ let bottomBand = 0;
 function glyphButton(id: string, name: string, glyph: string, act: () => void, live: boolean): void {
   const opts: ui.ButtonOptions = { content: () => ui.label(glyph) };
   if (!live) opts.disabled = true;
-  if (ui.style("btn").id(id).button(name, opts) && fresh()) later(act);
+  if (ui.style(__l10nStyle("btn")).id(id).button(name, opts) && fresh()) later(act);
 }
 /** index.html .card-btn: the hand's card as a paper button (rank over suit), lifted and ringed when selected. */
 function handCard(c: number, i: number, cs: typeof CARD, live: boolean): void {
@@ -471,8 +493,8 @@ function handCard(c: number, i: number, cs: typeof CARD, live: boolean): void {
       draw.box(r.x, r.y - lift, r.width, r.height, selected ? "card-sel" : "card-face");
       const fs = (cs.h > 64 ? 17 : 15) * ws.scale;
       const ink = hc ? "#000000" : color;
-      draw.text(rank, r.x + r.width / 2, r.y - lift + r.height / 2 - fs * 1.05, { size: fs, color: ink, weight: "bold", align: "center" });
-      draw.text(glyph, r.x + r.width / 2, r.y - lift + r.height / 2 + fs * 0.05, { size: fs, color: ink, weight: "bold", align: "center" });
+      draw.text(rank, r.x + r.width / 2, r.y - lift + r.height / 2 - fs * 1.05, __l10nDrawOptions({ size: fs, color: ink, weight: "bold", align: "center" }));
+      draw.text(glyph, r.x + r.width / 2, r.y - lift + r.height / 2 + fs * 0.05, __l10nDrawOptions({ size: fs, color: ink, weight: "bold", align: "center" }));
     },
   });
   if (res.activated && fresh()) later(() => { app.focusIdx = i; toggleCard(c); });
@@ -508,8 +530,8 @@ function statusRail(w: number, live: boolean): void {
     const text = `${m.kind === "set" ? T("Set {n}", { n: i }) : T("Run {n}", { n: i })}: ${m.cards.map(Rules.cardName).join(" ")}`;
     const opts: ui.ButtonOptions = {};
     if (!live) opts.disabled = true;
-    if (textWidth(text, "chip", "button") > w) opts.content = () => ui.style({ text: { align: "start" } }).paragraph(text, w - 20);
-    if (ui.style("chip", { width: w }).id(`meld-${i}`).button(text, opts) && fresh() && live) {
+    if (textWidth(text, "chip", "button") > w) opts.content = () => ui.style(__l10nStyle({ text: { align: "start" } })).paragraph(text, w - 20);
+    if (ui.style(__l10nStyle("chip"), __l10nStyle({ width: w })).id(`meld-${i}`).button(text, opts) && fresh() && live) {
       later(() => { if (app.selection.length === 1) doLayoff(i); });
     }
   });
@@ -614,7 +636,7 @@ function settingsPanel(w: number): void {
   heading("h2", T("Settings"), w, "settings-h");
   para(T("Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options."), w, "muted", "options-note");
   flow("settings-runtime", [
-    { id: "btn-options", text: T("Open Options"), act: () => openMenu() },
+    { id: "btn-options", text: T("Open Options"), act: () => __l10nOptions() },
     { id: "btn-rebind", text: T("Key bindings"), act: () => requestRebind() },
   ], w);
   heading("h3", T("Accessibility"), w, "access-h");
