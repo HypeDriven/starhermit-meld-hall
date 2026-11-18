@@ -76,7 +76,7 @@ export function announce(text: string, assertive = false): void {
   if (text) ui.announce(text.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
 }
 export function toast(text: () => string): void {
-  app.toast = { text, until: now() + 3.2 };
+  ui.toast!(text(), { duration: 3.2, position: "bottom", offset: 12, style: "toast" });
   announce(text());
 }
 function haptic(): void { if (app.settings.haptics) { try { vibrate(12); } catch { /* no motor */ } } }

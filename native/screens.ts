@@ -116,7 +116,7 @@ function badge(id: string, text: string): ui.Rect {
 function rect(r: ui.Rect): void { hudRects.push({ x: r.x, y: r.y, width: r.width, height: r.height }); }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   view.top = 0; view.bottom = 0; view.right = 0;
@@ -668,10 +668,11 @@ function bottomLines(L: Layout): void {
     ui.place("caption", { anchor: "bottom", y: base }, () =>
       ui.column("caption-col", () => para(text, Math.min(L.lw * 0.9, 600) - 28, "caption-text", "caption-text"), { style: "caption", align: "center" }));
   }
-  if (app.toast) {
-    const text = app.toast.text();
-    const w = Math.min(L.lw * 0.92, 420);
-    ui.place("toast", { anchor: "bottom", y: base + (app.caption ? 44 : 12) }, () =>
-      ui.column("toast-col", () => para(text, w - 34, "toast-text", "toast-text"), { style: "toast", align: "center" }));
-  }
+}
+
+export function drawScreens(): void {
+  if (app.screen !== "help") { drawScreensImmediate(); return; }
+  const actions = ["left","right","confirm","draw_deck","draw_discard","meld","layoff","discard","undo","hint","camera_reset","cancel","pause"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
 }
