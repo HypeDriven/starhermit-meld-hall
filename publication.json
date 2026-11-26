@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:03.976911+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-23T17:02:11.225593+00:00",
+    "coverArtUpdatedAt": "2026-11-26T13:07:57.897799+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-23T17:02:11.21497+00:00",
+      "deployedAt": "2026-11-26T13:07:57.88624+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.47.0",
+      "engineVersion": "1.50.0",
       "deployWarning": null
     },
     "description": "Draw cards, form sets and runs, and lay off cards onto existing melds to empty your hand first.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-23T17:02:11.376Z",
-  "sourceCommit": "1a07c88fded2846e02fcd0932b250e7776b01bb6",
-  "bytesReceived": 12278098,
-  "archiveSha256": "c25cc86e7bac1ec4c9a8da52955707ef7879330afcedcdffa75808af67ed997d",
+  "publishedAt": "2026-11-26T13:07:58.002Z",
+  "sourceCommit": "8a1ac5b8c0a9f10885bc39d0a78693e4eaa435fe",
+  "bytesReceived": 12278078,
+  "archiveSha256": "135a089aa041c5f19ee490e5edbef593746bed6eae5c6181859f668d605b8bcb",
   "indexSha256": "20ad07b6a16bc9ab0833c00522b7f3f3155e674b68688dfe3cce304939aa4935",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 12278098,
+    "bytesReceived": 12278078,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.47.0",
+    "engineVersion": "1.50.0",
     "deployWarning": null
   },
   "liveVerification": {
