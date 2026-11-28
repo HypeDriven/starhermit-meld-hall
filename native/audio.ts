@@ -55,7 +55,6 @@ export function loadSfx(): void {
         if (clips.length) banks.set(event, new SoundBank({ clips, order: "sequence", bus: event === "ui" ? "interface" : "effects" }));
       });
   }
-  renderLoops();
 }
 
 /** src/audio.js play(kind): the event's next variant and its caption. */
@@ -129,7 +128,17 @@ function renderLoops(): void {
 }
 
 /** Each frame, once the mixer runs: the room tone and the pad. */
+let __bedsStarted = false;
+function startBeds(): void {
+  if (__bedsStarted) return;
+  __bedsStarted = true;
+  void (async () => {
+    renderLoops();
+  })();
+}
+
 export function update(): void {
+  startBeds();
   if (context.state !== "running") return;
   if (ambClip && !ambVoice) {
     try { ambVoice = playClip(ambClip, { bus: "music", gain: 0.8, loop: true }); } catch { ambVoice = null; }
